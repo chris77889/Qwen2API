@@ -1,0 +1,7 @@
+accounts:
+- cookie: ***
+  enabled: true
+  expires_at: 1745559106
+  password: ***
+  token: ***
+  username: ***

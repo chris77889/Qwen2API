@@ -1,0 +1,275 @@
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "qwen-max-latest",
+      "object": "model",
+      "created": 0,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qwen-max-latest-thinking",
+      "object": "model",
+      "created": 0,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qwen-max-latest-search",
+      "object": "model",
+      "created": 0,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qwen-max-latest-thinking-search",
+      "object": "model",
+      "created": 0,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qwen-max-latest-draw",
+      "object": "model",
+      "created": 0,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qwen-plus-latest",
+      "object": "model",
+      "created": 0,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qwen-plus-latest-thinking",
+      "object": "model",
+      "created": 0,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qwen-plus-latest-search",
+      "object": "model",
+      "created": 0,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qwen-plus-latest-thinking-search",
+      "object": "model",
+      "created": 0,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qwen-plus-latest-draw",
+      "object": "model",
+      "created": 0,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qwq-32b",
+      "object": "model",
+      "created": 0,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qwq-32b-thinking",
+      "object": "model",
+      "created": 0,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qwq-32b-search",
+      "object": "model",
+      "created": 0,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qwq-32b-thinking-search",
+      "object": "model",
+      "created": 0,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qwq-32b-draw",
+      "object": "model",
+      "created": 0,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qwen-turbo-latest",
+      "object": "model",
+      "created": 0,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qwen-turbo-latest-thinking",
+      "object": "model",
+      "created": 0,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qwen-turbo-latest-search",
+      "object": "model",
+      "created": 0,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qwen-turbo-latest-thinking-search",
+      "object": "model",
+      "created": 0,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qwen-turbo-latest-draw",
+      "object": "model",
+      "created": 0,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qwen2.5-vl-32b-instruct",
+      "object": "model",
+      "created": 0,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qwen2.5-vl-32b-instruct-thinking",
+      "object": "model",
+      "created": 0,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qwen2.5-vl-32b-instruct-search",
+      "object": "model",
+      "created": 0,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qwen2.5-vl-32b-instruct-thinking-search",
+      "object": "model",
+      "created": 0,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qwen2.5-vl-32b-instruct-draw",
+      "object": "model",
+      "created": 0,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qwen2.5-14b-instruct-1m",
+      "object": "model",
+      "created": 0,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qwen2.5-14b-instruct-1m-thinking",
+      "object": "model",
+      "created": 0,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qwen2.5-14b-instruct-1m-search",
+      "object": "model",
+      "created": 0,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qwen2.5-14b-instruct-1m-thinking-search",
+      "object": "model",
+      "created": 0,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qwen2.5-14b-instruct-1m-draw",
+      "object": "model",
+      "created": 0,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qvq-72b-preview",
+      "object": "model",
+      "created": 0,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qvq-72b-preview-thinking",
+      "object": "model",
+      "created": 0,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qvq-72b-preview-search",
+      "object": "model",
+      "created": 0,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qvq-72b-preview-thinking-search",
+      "object": "model",
+      "created": 0,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qvq-72b-preview-draw",
+      "object": "model",
+      "created": 0,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qwen2.5-coder-32b-instruct",
+      "object": "model",
+      "created": 0,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qwen2.5-coder-32b-instruct-thinking",
+      "object": "model",
+      "created": 0,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qwen2.5-coder-32b-instruct-search",
+      "object": "model",
+      "created": 0,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qwen2.5-coder-32b-instruct-thinking-search",
+      "object": "model",
+      "created": 0,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qwen2.5-coder-32b-instruct-draw",
+      "object": "model",
+      "created": 0,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qwen2.5-72b-instruct",
+      "object": "model",
+      "created": 0,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qwen2.5-72b-instruct-thinking",
+      "object": "model",
+      "created": 0,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qwen2.5-72b-instruct-search",
+      "object": "model",
+      "created": 0,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qwen2.5-72b-instruct-thinking-search",
+      "object": "model",
+      "created": 0,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qwen2.5-72b-instruct-draw",
+      "object": "model",
+      "created": 0,
+      "owned_by": "qwen"
+    }
+  ]
+}
