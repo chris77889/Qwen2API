@@ -1,12 +1,8 @@
 import os
 import uvicorn
 from app.main import app, get_start_info
-from dotenv import load_dotenv
 from app.core.logger import logger
 from app.core.config import config_manager
-
-# 加载环境变量
-load_dotenv()
 
 if __name__ == "__main__":
     # 从配置管理器获取配置

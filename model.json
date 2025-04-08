@@ -122,6 +122,66 @@
       "owned_by": "qwen"
     },
     {
+      "id": "qwen2.5-omni-7b",
+      "object": "model",
+      "created": 0,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qwen2.5-omni-7b-thinking",
+      "object": "model",
+      "created": 0,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qwen2.5-omni-7b-search",
+      "object": "model",
+      "created": 0,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qwen2.5-omni-7b-thinking-search",
+      "object": "model",
+      "created": 0,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qwen2.5-omni-7b-draw",
+      "object": "model",
+      "created": 0,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qvq-72b-preview-0310",
+      "object": "model",
+      "created": 0,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qvq-72b-preview-0310-thinking",
+      "object": "model",
+      "created": 0,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qvq-72b-preview-0310-search",
+      "object": "model",
+      "created": 0,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qvq-72b-preview-0310-thinking-search",
+      "object": "model",
+      "created": 0,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qvq-72b-preview-0310-draw",
+      "object": "model",
+      "created": 0,
+      "owned_by": "qwen"
+    },
+    {
       "id": "qwen2.5-vl-32b-instruct",
       "object": "model",
       "created": 0,
@@ -177,36 +237,6 @@
     },
     {
       "id": "qwen2.5-14b-instruct-1m-draw",
-      "object": "model",
-      "created": 0,
-      "owned_by": "qwen"
-    },
-    {
-      "id": "qvq-72b-preview",
-      "object": "model",
-      "created": 0,
-      "owned_by": "qwen"
-    },
-    {
-      "id": "qvq-72b-preview-thinking",
-      "object": "model",
-      "created": 0,
-      "owned_by": "qwen"
-    },
-    {
-      "id": "qvq-72b-preview-search",
-      "object": "model",
-      "created": 0,
-      "owned_by": "qwen"
-    },
-    {
-      "id": "qvq-72b-preview-thinking-search",
-      "object": "model",
-      "created": 0,
-      "owned_by": "qwen"
-    },
-    {
-      "id": "qvq-72b-preview-draw",
       "object": "model",
       "created": 0,
       "owned_by": "qwen"
