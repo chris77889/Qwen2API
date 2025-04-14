@@ -276,7 +276,8 @@ class RequestService:
         model: Optional[str] = None,
         stream: bool = True,
         auth_token: Optional[str] = None,
-        timeout: float = 60.0
+        timeout: float = 60.0,
+        temperature: Optional[float] = 1.0
     ) -> Any:
         """
         聊天补全
@@ -287,6 +288,7 @@ class RequestService:
             stream: 是否流式输出
             auth_token: 认证令牌
             timeout: 超时时间
+            temperature: 采样温度，控制输出的随机性，取值范围0-2，默认1.0
             
         Returns:
             Any: 响应数据
@@ -437,6 +439,10 @@ class RequestService:
                 "incremental_output": True,
                 "id": str(uuid.uuid4())
             }
+            
+            # 添加temperature参数（如果提供）
+            if temperature is not None:
+                data["temperature"] = temperature
             
             # 添加session_id和chat_id（如果存在）
             if session_id:
@@ -603,6 +609,8 @@ class RequestService:
                 "chat_type": "t2i",
                 "model": model,
                 "messages": processed_messages,
+                "session_id": str(uuid.uuid4()),
+                "chat_id": str(uuid.uuid4()),
                 "id": str(uuid.uuid4()),
                 "size": size
             }

@@ -378,7 +378,13 @@ async def chat_completions(
             )
         else:
             # 常规聊天请求
-            response_data = await request_service.chat_completion(model=request.model, messages=messages, stream=stream, auth_token=auth_token)
+            response_data = await request_service.chat_completion(
+                model=request.model, 
+                messages=messages, 
+                stream=stream, 
+                auth_token=auth_token,
+                temperature=request.temperature
+            )
             
             # 检查请求是否成功
             if response_data.get('status') != 200:

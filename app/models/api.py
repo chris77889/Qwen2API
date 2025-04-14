@@ -21,6 +21,7 @@ class ChatRequest(BaseModel):
     stream: Optional[bool] = Field(None, description="是否使用流式响应")
     chat_type: Optional[str] = Field(None, description="聊天类型")
     id: Optional[str] = Field(None, description="请求ID")
+    temperature: Optional[float] = Field(None, description="采样温度，控制输出的随机性，取值范围0-2，值越大随机性越强")
 
 
 class ImageRequest(BaseModel):
