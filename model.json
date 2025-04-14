@@ -32,6 +32,12 @@
       "owned_by": "qwen"
     },
     {
+      "id": "qwen-max-latest-video",
+      "object": "model",
+      "created": 0,
+      "owned_by": "qwen"
+    },
+    {
       "id": "qwen-plus-latest",
       "object": "model",
       "created": 0,
@@ -57,6 +63,12 @@
     },
     {
       "id": "qwen-plus-latest-draw",
+      "object": "model",
+      "created": 0,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qwen-plus-latest-video",
       "object": "model",
       "created": 0,
       "owned_by": "qwen"
@@ -92,6 +104,12 @@
       "owned_by": "qwen"
     },
     {
+      "id": "qwq-32b-video",
+      "object": "model",
+      "created": 0,
+      "owned_by": "qwen"
+    },
+    {
       "id": "qwen-turbo-latest",
       "object": "model",
       "created": 0,
@@ -117,6 +135,12 @@
     },
     {
       "id": "qwen-turbo-latest-draw",
+      "object": "model",
+      "created": 0,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qwen-turbo-latest-video",
       "object": "model",
       "created": 0,
       "owned_by": "qwen"
@@ -152,6 +176,12 @@
       "owned_by": "qwen"
     },
     {
+      "id": "qwen2.5-omni-7b-video",
+      "object": "model",
+      "created": 0,
+      "owned_by": "qwen"
+    },
+    {
       "id": "qvq-72b-preview-0310",
       "object": "model",
       "created": 0,
@@ -177,6 +207,12 @@
     },
     {
       "id": "qvq-72b-preview-0310-draw",
+      "object": "model",
+      "created": 0,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qvq-72b-preview-0310-video",
       "object": "model",
       "created": 0,
       "owned_by": "qwen"
@@ -212,6 +248,12 @@
       "owned_by": "qwen"
     },
     {
+      "id": "qwen2.5-vl-32b-instruct-video",
+      "object": "model",
+      "created": 0,
+      "owned_by": "qwen"
+    },
+    {
       "id": "qwen2.5-14b-instruct-1m",
       "object": "model",
       "created": 0,
@@ -237,6 +279,12 @@
     },
     {
       "id": "qwen2.5-14b-instruct-1m-draw",
+      "object": "model",
+      "created": 0,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qwen2.5-14b-instruct-1m-video",
       "object": "model",
       "created": 0,
       "owned_by": "qwen"
@@ -272,6 +320,12 @@
       "owned_by": "qwen"
     },
     {
+      "id": "qwen2.5-coder-32b-instruct-video",
+      "object": "model",
+      "created": 0,
+      "owned_by": "qwen"
+    },
+    {
       "id": "qwen2.5-72b-instruct",
       "object": "model",
       "created": 0,
@@ -297,6 +351,12 @@
     },
     {
       "id": "qwen2.5-72b-instruct-draw",
+      "object": "model",
+      "created": 0,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qwen2.5-72b-instruct-video",
       "object": "model",
       "created": 0,
       "owned_by": "qwen"

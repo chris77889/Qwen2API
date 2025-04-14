@@ -94,8 +94,10 @@ async def update_models(token: str = Depends(verify_auth)) -> Dict[str, Any]:
                 models_list.append(f"{model_id}-thinking-search")
                 
                 # 绘图模式：只有部分模型支持
-                if model_id in ["qwen-max-latest", "qwen-plus-latest"]:
+                if model_id in ["qwen-max-latest", "qwen-plus-latest","qwen-turbo-latest"]:
                     models_list.append(f"{model_id}-draw")
+                if model_id in ["qwen-max-latest", "qwen-plus-latest","qwen-turbo-latest"]:
+                    models_list.append(f"{model_id}-video")
             
             # 构建模型列表响应
             models = {

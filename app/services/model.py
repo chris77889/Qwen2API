@@ -74,12 +74,12 @@ class ModelService:
         })
         
         # 视频生成模式
-        #models.append({
-        #    "id": f"{model_id}-video",
-        #    "object": "model",
-        #    "created": 0,
-        #    "owned_by": "qwen"
-        #})
+        models.append({
+            "id": f"{model_id}-video",
+            "object": "model",
+            "created": 0,
+            "owned_by": "qwen"
+        })
         
         return models
         

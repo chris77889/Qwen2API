@@ -806,7 +806,7 @@ class RequestService:
 
     async def video_generation(
         self,
-        prompt: str,
+        messages: List[Dict[str, Any]],
         model: Optional[str] = None,
         size: Optional[str] = None,
         auth_token: Optional[str] = None,
@@ -816,7 +816,7 @@ class RequestService:
         视频生成
         
         Args:
-            prompt: 提示词
+            messages: 消息列表
             model: 模型名称
             size: 尺寸
             auth_token: 认证令牌
@@ -837,28 +837,90 @@ class RequestService:
             else:
                 model = config_manager.CONSTANTS["QWEN_VIDEO_MODEL"]
                 
+            # 处理消息列表
+            processed_messages = []
+            for message in messages:
+                # 如果是助手消息，只保留必要字段
+                if message.get('role') == 'assistant':
+                    processed_message = {
+                        "role": "assistant",
+                        "chat_type": "t2v"
+                    }
+                    
+                    # 处理消息内容
+                    content = message.get('content', '')
+                    if isinstance(content, str):
+                        processed_message['content'] = content
+                else:
+                    # 非助手消息保持原有格式
+                    processed_message = {
+                        "role": message.get('role', 'user'),
+                        "chat_type": "t2v",
+                        "extra": message.get('extra', {}),
+                        "feature_config": {
+                            "thinking_enabled": False
+                        }
+                    }
+                    
+                    # 处理消息内容
+                    content = message.get('content', '')
+                    if isinstance(content, list):
+                        # 处理多模态消息
+                        processed_content = []
+                        for item in content:
+                            if item.get('type') == 'text':
+                                processed_content.append({
+                                    "type": "text",
+                                    "text": item.get('text'),
+                                    "chat_type": "t2v",
+                                    "feature_config": {
+                                        "thinking_enabled": False
+                                    }
+                                })
+                            elif item.get('type') == 'image_url':
+                                # 获取图片数据
+                                image_data = item.get('image_url', {}).get('url', '')
+                                if image_data:
+                                    # 使用upload服务处理图片上传
+                                    from .upload import upload_service
+                                    uploaded_url = await upload_service.save_url(image_data, auth_token)
+                                    if uploaded_url:
+                                        processed_content.append({
+                                            "type": "image",
+                                            "image": uploaded_url
+                                        })
+                            elif item.get('type') == 'image':
+                                # 直接处理base64数据
+                                image_data = item.get('image', '')
+                                if image_data:
+                                    # 使用upload服务处理图片上传
+                                    from .upload import upload_service
+                                    uploaded_url = await upload_service.save_url(image_data, auth_token)
+                                    if uploaded_url:
+                                        processed_content.append({
+                                            "type": "image",
+                                            "image": uploaded_url
+                                        })
+                        processed_message['content'] = processed_content
+                    else:
+                        processed_message['content'] = content
+
+                processed_messages.append(processed_message)
+                
             # 构建请求数据
             data = {
                 "stream": False,
                 "incremental_output": True,
                 "chat_type": "t2v",
                 "model": model,
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": prompt,
-                        "chat_type": "t2v",
-                        "extra": {},
-                        "feature_config": {
-                            "thinking_enabled": False
-                        }
-                    }
-                ],
+                "messages": processed_messages,
+                "session_id": str(uuid.uuid4()),
+                "chat_id": str(uuid.uuid4()),
                 "id": str(uuid.uuid4()),
                 "size": size
             }
             
-            #logger.info(f"发送视频生成请求，参数：{json.dumps(data, ensure_ascii=False, indent=2)}")
+            logger.info(f"发送视频生成请求，参数：{json.dumps(data, ensure_ascii=False, indent=2)}")
             
             response = await self._request(
                 method="POST",
@@ -868,24 +930,51 @@ class RequestService:
                 timeout=timeout
             )
             
-            #logger.info(f"视频生成请求响应：{json.dumps(response, ensure_ascii=False, indent=2)}")
+            if not response:
+                logger.error("视频生成请求返回空响应")
+                return {
+                    "status": 500,
+                    "error": "视频生成请求返回空响应"
+                }
+                
+            if 'messages' not in response:
+                logger.error(f"响应中缺少 messages 字段：{json.dumps(response, ensure_ascii=False, indent=2)}")
+                return {
+                    "status": 500,
+                    "error": "响应格式错误：缺少 messages 字段"
+                }
             
             # 提取任务ID
             try:
-                task_id = next(msg['extra']['wanx']['task_id'] 
-                             for msg in response['messages'] 
-                             if msg['role'] == 'assistant')
+                # 查找包含任务ID的助手消息
+                assistant_messages = [
+                    msg for msg in response['messages'] 
+                    if msg.get('role') == 'assistant' 
+                    and msg.get('extra') 
+                    and isinstance(msg['extra'], dict)
+                    and msg['extra'].get('wanx')
+                    and isinstance(msg['extra']['wanx'], dict)
+                    and msg['extra']['wanx'].get('task_id')
+                ]
+                
+                if not assistant_messages:
+                    logger.error(f"未找到包含任务ID的助手消息，响应内容：{json.dumps(response, ensure_ascii=False, indent=2)}")
+                    return {
+                        "status": 500,
+                        "error": "未找到包含任务ID的助手消息"
+                    }
+                    
+                task_id = assistant_messages[0]['extra']['wanx']['task_id']
                 logger.info(f"成功获取任务ID：{task_id}")
                 return {
                     "status": 200,
                     "task_id": task_id
                 }
-            except (KeyError, StopIteration) as e:
+            except Exception as e:
                 logger.error(f"提取任务ID失败：{str(e)}")
                 logger.error(f"响应内容：{json.dumps(response, ensure_ascii=False, indent=2)}")
                 return {
                     "status": 500,
-                    "task_id": None,
                     "error": f"提取任务ID失败：{str(e)}"
                 }
                 
@@ -932,7 +1021,7 @@ class RequestService:
                     timeout=30.0
                 )
                 # 有bug，报错translate algoResult error, result is null.，到时候要用再处理
-                #logger.info(f"第 {retry_count + 1} 次检查状态，响应：{json.dumps(response, ensure_ascii=False, indent=2)}")
+                logger.info(f"第 {retry_count + 1} 次检查状态，响应：{json.dumps(response, ensure_ascii=False, indent=2)}")
                 
                 # 检查任务状态
                 task_status = response.get('task_status', '')
@@ -948,7 +1037,7 @@ class RequestService:
                     }
                 
                 # 处理成功状态
-                if response.get('content'):
+                if task_status == 'success' and response.get('content'):
                     logger.info("视频生成成功")
                     return {
                         "status": 200,

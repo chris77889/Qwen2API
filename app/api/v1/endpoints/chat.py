@@ -22,6 +22,30 @@ from app.core.logger import logger
 
 router = APIRouter()
 
+async def async_generator_video_stream(video_url: str):
+    """视频流式响应生成器"""
+    try:
+        stream_template = {
+            "id": f"chatcmpl-{uuid.uuid4()}",
+            "object": "chat.completion.chunk",
+            "created": int(time.time() * 1000),
+            "choices": [
+                {
+                    "index": 0,
+                    "delta": {
+                        "content": f"<video controls='controls' src='{video_url}' data-src='{video_url}'></video>"
+                    },
+                    "finish_reason": None
+                }
+            ]
+        }
+        
+        yield f"data: {json.dumps(stream_template)}\n\n"
+        yield "data: [DONE]\n\n"
+    except Exception as e:
+        logger.error(f"Error in async_generator_video_stream: {e}")
+        yield f"data: {json.dumps({'error': str(e)})}\n\n"
+        yield "data: [DONE]\n\n"
 
 @router.post("/completions")
 async def chat_completions(
@@ -324,7 +348,15 @@ async def chat_completions(
             
             # 发送视频生成请求
             response_data = await request_service.video_generation(
-                prompt=prompt,
+                messages=[{
+                    "role": "user",
+                    "content": prompt,
+                    "chat_type": "t2v",
+                    "extra": {},
+                    "feature_config": {
+                        "thinking_enabled": False
+                    }
+                }],
                 model=request.model,
                 size=size,
                 auth_token=auth_token
@@ -364,18 +396,43 @@ async def chat_completions(
                     media_type="application/json"
                 )
             
-            # 构建成功响应
-            return Response(
-                content=json.dumps({
-                    "choices": [{
-                        "message": {
-                            "content": result['url'],
-                            "role": "assistant"
+            # 处理流式/非流式响应
+            if stream:
+                return StreamingResponse(
+                    async_generator_video_stream(result.get('url')),
+                    media_type="text/event-stream",
+                    headers={
+                        "Cache-Control": "no-cache",
+                        "Connection": "keep-alive",
+                    }
+                )
+            else:
+                # 构建非流式响应
+                video_content = f"<video controls='controls' src='{result['url']}' data-src='{result['url']}'></video>"
+                return Response(
+                    content=json.dumps({
+                        "id": f"chatcmpl-{uuid.uuid4()}",
+                        "object": "chat.completion",
+                        "created": int(time.time() * 1000),
+                        "model": request.model,
+                        "choices": [
+                            {
+                                "index": 0,
+                                "message": {
+                                    "role": "assistant",
+                                    "content": video_content
+                                },
+                                "finish_reason": "stop"
+                            }
+                        ],
+                        "usage": {
+                            "prompt_tokens": 0,
+                            "completion_tokens": 0,
+                            "total_tokens": 0
                         }
-                    }]
-                }),
-                media_type="application/json"
-            )
+                    }),
+                    media_type="application/json"
+                )
         else:
             # 常规聊天请求
             response_data = await request_service.chat_completion(

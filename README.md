@@ -9,6 +9,7 @@
 - 支持思考过程显示
 - 支持搜索功能
 - 支持图像生成
+- 支持视频生成
 - 支持多账户轮询调度
 
 ## 环境要求
@@ -22,11 +23,6 @@
 ## 快速开始
 
 ### 1. 安装依赖
-
-> 导出依赖 
->```bash
->pipdeptree --warn silence | Select-String -Pattern '^\w+' > .\requirements.txt
->```
 
 ```bash
 pip install -r requirements.txt
@@ -56,9 +52,18 @@ python run.py
 
 在模型名称后添加`-search`后缀，例如：`qwen-max-latest-search`。
 
+### 套娃
+
+在模型名称后添加`-thinking-search`后缀，例如：`qwen-max-latest-thinking-search`。
+
 ### 图像生成
 
 在模型名称后添加`-draw`后缀，例如：`qwen-max-latest-draw`。
+
+### 视频生成
+
+在模型名称后添加`-video`后缀，例如：`qwen-max-latest-video`。
+（注意Cherry Studio无法正常显示🫥）
 
 
 ## 免责声明
@@ -68,3 +73,9 @@ python run.py
 ## 许可证
 
 MIT License
+
+#### 自用
+> 导出依赖 
+>```bash
+>pipdeptree --warn silence | Select-String -Pattern '^\w+' > .\requirements.txt
+>```
