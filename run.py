@@ -3,10 +3,12 @@ import uvicorn
 from app.main import app, get_start_info
 from app.core.logger.logger import get_logger
 from app.core.config_manager import ConfigManager
+from app.core.logger.logger_config import configure_logging
 
-logger = get_logger(__name__)
+configure_logging()
+logger = get_logger("run")
 config_manager = ConfigManager()
-    
+
 if __name__ == "__main__":
     # 从配置管理器获取配置
     listen_address = config_manager.get('api.host')
@@ -21,5 +23,6 @@ if __name__ == "__main__":
         "app.main:app", 
         host=listen_address, 
         port=service_port,
-        reload=reload_enabled
+        reload=reload_enabled,
+        log_config=None,
     ) 

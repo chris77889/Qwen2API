@@ -1,6 +1,6 @@
 from typing import Dict, Optional, Tuple
 from .account_manager import AccountManager
-
+import random
 class CookieService:
     def __init__(self, account_manager: AccountManager):
         """
@@ -104,3 +104,17 @@ class CookieService:
             headers["cookie"] = merged_cookies
             
         return headers 
+    def get_auth_token(self) -> str:
+        """
+        从所有账号中随机获取一个token
+        
+        Returns:
+            str: 随机选择的认证Token，如果没有可用token则返回空字符串
+        """
+        accounts = self.account_manager.get_all_accounts()
+        # 直接随机选择一个账号,然后检查是否有token,避免创建新列表
+        if accounts:
+            account = random.choice(accounts)
+            return account.get('token', '')
+        return ''
+    

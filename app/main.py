@@ -9,6 +9,8 @@ import time
 import platform
 
 from app.router.account import router as account_router
+from app.router.model import router as model_router
+from app.router.chat import router as chat_router
 from app.core.logger.logger import get_logger
 from app.core.config_manager import ConfigManager
 from app.core.account_manager import AccountManager
@@ -33,9 +35,9 @@ app.add_middleware(
 )
 
 # 注册API路由
-app.include_router(account_router, prefix="/accounts")
-
-
+app.include_router(account_router)
+app.include_router(model_router)
+app.include_router(chat_router)
 def get_start_info() -> str:
     """
     获取启动信息字符串
@@ -58,20 +60,3 @@ API前缀：{api_prefix}
 API密钥数：{api_keys_count}
 -------------------------------------------------------------------
     """
-
-
-if __name__ == "__main__":
-    # 获取配置
-    listen_address = config_manager.get("api.listen_address", "0.0.0.0")
-    service_port = config_manager.get("api.port", 8000)
-    
-    # 打印启动信息
-    logger.info(get_start_info())
-    
-    # 启动服务器
-    uvicorn.run(
-        "app.main:app",
-        host=listen_address,
-        port=service_port,
-        reload=True
-    ) 

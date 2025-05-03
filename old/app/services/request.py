@@ -519,12 +519,12 @@ class RequestService:
                                         # 你也可以直接 yield，只做 minimal 重新编码，但最好确保 "choices" 存在
                                         yield f"data: {json.dumps(data_json, ensure_ascii=False)}\n\n".encode("utf-8")
                                     except Exception as e:
-                                        logger.error(f"stream parse error: {e} | {payload}")
+                                        logger.error(f"流式解析错误: {e} | {payload}")
                                         yield f"data: {json.dumps({'error': str(e)})}\n\n".encode()
                                 if not is_finished:
                                     yield b"data: [DONE]\n\n"
                     except Exception as e:
-                        logger.error(f"stream_response error: {e}\n{traceback.format_exc()}")
+                        logger.error(f"流式响应错误: {e}\n{traceback.format_exc()}")
                         err = {"error": str(e)}
                         yield f"data: {json.dumps(err)}\n\n".encode()
                         yield b"data: [DONE]\n\n"
