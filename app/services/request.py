@@ -308,6 +308,201 @@ class RequestService:
             error_msg = f"{media_type}生成失败: {str(e)}"
             logger.error(f"{error_msg}\n堆栈跟踪：\n{error_stack}")
             return {"status": 500, "error": error_msg}
+# ======================= 下面是新增的 chat_completion =======================
+    async def chat_completion(
+        self,
+        messages: List[Dict[str, Any]],
+        model: Optional[str] = None,
+        stream: bool = True,
+        auth_token: Optional[str] = None,
+        timeout: float = 60.0,
+        temperature: Optional[float] = 1.0
+    ) -> Any:
+        """
+        聊天补全（兼容流式与非流式）
+        """
+        try:
+            if not messages:
+                raise ValueError("消息列表不能为空")
+
+            processed_messages = []
+            last_valid_message = None
+            session_id = None
+            chat_id = None
+            thinking_enabled = False
+
+            if model and ('-thinking' in model or 'qwq-32b' in model):
+                thinking_enabled = True
+
+            for i, message in enumerate(messages):
+                if message is None:
+                    logger.warning(f"跳过空消息，索引: {i}")
+                    continue
+                if isinstance(message, str):
+                    processed_message = {
+                        "role": "user",
+                        "content": message,
+                        "chat_type": "t2t",
+                        "extra": {},
+                        "feature_config": {"thinking_enabled": thinking_enabled}
+                    }
+                elif isinstance(message, dict):
+                    processed_message = {
+                        "role": message.get('role', 'user'),
+                        "chat_type": "t2t",
+                        "extra": {},
+                        "feature_config": {"thinking_enabled": thinking_enabled}
+                    }
+                    if processed_message['role'] == 'developer':
+                        processed_message['role'] = 'system'
+                    content = message.get('content', '')
+                    if isinstance(content, list):
+                        processed_content = []
+                        for item in content:
+                            if item.get('type') == 'text':
+                                processed_content.append({
+                                    "type": "text",
+                                    "text": item.get('text'),
+                                    "chat_type": "t2t",
+                                    "feature_config": {"thinking_enabled": thinking_enabled}
+                                })
+                            elif item.get('type') == 'image_url':
+                                image_data = item.get('image_url', {}).get('url', '')
+                                if image_data:
+                                    # 上传图像URL，按你的upload_service方式留二次改造
+                                    processed_content.append({
+                                        "type": "image",
+                                        "image": image_data
+                                    })
+                            elif item.get('type') == 'image':
+                                image_data = item.get('image', '')
+                                if image_data:
+                                    processed_content.append({
+                                        "type": "image",
+                                        "image": image_data
+                                    })
+                        processed_message['content'] = processed_content
+                    else:
+                        processed_message['content'] = content
+                if processed_message['role'] == 'assistant':
+                    if isinstance(content, str) and '<think>' in content and '</think>' in content:
+                        thinking_enabled = True
+                if message.get('chat_type'):
+                    processed_message['chat_type'] = message['chat_type']
+                if message.get('extra'):
+                    processed_message['extra'] = message['extra']
+                processed_messages.append(processed_message)
+                if processed_message['role'] != 'assistant':
+                    last_valid_message = processed_message
+
+            if not processed_messages:
+                raise ValueError("处理后的消息列表为空")
+
+            chat_model = model or config_manager.get('chat.model', config_manager.CONSTANTS["QWEN_DEFAULT_MODEL"])
+            chat_type = "t2t"
+            # 除去模型后缀
+            if '-thinking' in chat_model:
+                chat_model = chat_model.replace('-thinking', '')
+            if '-search' in chat_model:
+                if last_valid_message is not None:
+                    last_valid_message['chat_type'] = 'search'
+                chat_model = chat_model.replace('-search', '')
+                chat_type = 'search'
+            # 获取session_id, chat_id
+            if isinstance(messages, list) and len(messages) > 0:
+                last_message = messages[-1]
+                if isinstance(last_message, dict):
+                    session_id = last_message.get('session_id')
+                    chat_id = last_message.get('chat_id')
+
+            data = {
+                "model": chat_model,
+                "messages": processed_messages,
+                "stream": stream,
+                "chat_type": chat_type,
+                "incremental_output": True,
+                "id": str(uuid.uuid4())
+            }
+            if temperature is not None:
+                data["temperature"] = temperature
+            if session_id:
+                data["session_id"] = session_id
+            if chat_id:
+                data["chat_id"] = chat_id
+
+            if stream:
+                # 做流式yield
+                async def stream_response():
+                    try:
+                        url = f"{self.base_url}/chat/completions"
+                        headers = account_manager.get_headers(auth_token)
+                        is_finished = False
+                        async with httpx.AsyncClient(timeout=timeout) as client:
+                            async with client.stream(
+                                "POST", url,
+                                json=data,
+                                headers=headers
+                            ) as response:
+                                temp_content = ""
+                                # 注意：务必捕获、解析、回传 chunk
+                                async for line in response.aiter_lines():
+                                    print(line)
+                                    line = line.strip()
+                                    if not line:
+                                        continue
+                                    # 只处理 sse 范围（data: 开头）（兼容 temp_content 分片合并）
+                                    if not line.startswith("data: "):
+                                        temp_content += line
+                                        continue
+                                    if temp_content:
+                                        line = temp_content + line
+                                        temp_content = ""
+                                    payload = line[6:]
+                                    if payload == "[DONE]":
+                                        yield b"data: [DONE]\n\n"
+                                        is_finished = True
+                                        break
+                                    try:
+                                        data_json = json.loads(payload)
+                                        # 你也可以直接 yield，只做 minimal 重新编码，但最好确保 "choices" 存在
+                                        yield f"data: {json.dumps(data_json, ensure_ascii=False)}\n\n".encode("utf-8")
+                                    except Exception as e:
+                                        logger.error(f"stream parse error: {e} | {payload}")
+                                        yield f"data: {json.dumps({'error': str(e)})}\n\n".encode()
+                                if not is_finished:
+                                    yield b"data: [DONE]\n\n"
+                    except Exception as e:
+                        logger.error(f"stream_response error: {e}\n{traceback.format_exc()}")
+                        err = {"error": str(e)}
+                        yield f"data: {json.dumps(err)}\n\n".encode()
+                        yield b"data: [DONE]\n\n"
+                return {
+                    "status": 200,
+                    "response": stream_response(),
+                    "thinking_enabled": thinking_enabled
+                }
+            else:
+                resp = await self._request(
+                    method="POST",
+                    endpoint="chat/completions",
+                    data=data,
+                    auth_token=auth_token,
+                    timeout=timeout
+                )
+                return {"status": 200, "response": resp}
+        except Exception as e:
+            error_stack = traceback.format_exc()
+            logger.error(f"请求失败: {str(e)}\n堆栈跟踪:\n{error_stack}")
+            return {
+                "status": 500,
+                "response": {
+                    "error": {
+                        "message": str(e),
+                        "type": "internal_server_error",
+                        "stack_trace": error_stack
+                    }
+                }
+            }
 
 # 创建唯一实例
 request_service = RequestService()
