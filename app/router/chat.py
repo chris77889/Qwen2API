@@ -7,11 +7,14 @@ from app.core.cookie_service import CookieService
 from app.core.security import verify_api_key
 from app.core.account_manager import AccountManager
 from app.models.chat import ChatRequest
+from app.service.upload_service import UploadService
 # 请确保已提前实例化 ModelService、CompletionService、MessageService
 model_service = ModelService()
 completion_service = CompletionService()
-message_service = MessageService(model_service, completion_service)
 cookie_service = CookieService(AccountManager())
+upload_service = UploadService()
+message_service = MessageService(model_service, completion_service, cookie_service, upload_service)
+
 router = APIRouter(prefix="/v1", tags=["chat"])
 
 @router.post("/chat/completions")

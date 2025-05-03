@@ -1,7 +1,7 @@
 import json
 import uuid
 import time
-from typing import Dict, List, Optional, Any, AsyncGenerator
+from typing import Dict, List, Any, AsyncGenerator
 import httpx
 from fastapi import HTTPException
 
@@ -25,7 +25,8 @@ class CompletionService:
         chat_type: str = "t2t",
         sub_chat_type: str = "t2t",
         chat_mode: str = "normal",
-        temperature: Optional[float] = None
+        size: str = None,
+        temperature: float = 1.0
     ) -> Dict[str, Any]:
         data = {
             "stream": stream,
@@ -37,8 +38,10 @@ class CompletionService:
             "chat_id": str(uuid.uuid4()),
             "id": str(uuid.uuid4()),
             "sub_chat_type": sub_chat_type,
-            "chat_mode": chat_mode
+            "chat_mode": chat_mode,
         }
+        if size is not None:
+            data["size"] = size
         if temperature is not None:
             data["temperature"] = temperature
         return data
@@ -52,6 +55,7 @@ class CompletionService:
         chat_type: str = "t2t",
         sub_chat_type: str = "t2t",
         chat_mode: str = "normal",
+        size: str = None,
         temperature: float = 1.0,
         timeout: float = 60.0
     ) -> AsyncGenerator[bytes, None]:
@@ -65,7 +69,8 @@ class CompletionService:
             chat_type=chat_type,
             sub_chat_type=sub_chat_type,
             chat_mode=chat_mode,
-            temperature=temperature
+            temperature=temperature,
+            size=size
         )
         headers = self.cookie_service.get_headers(auth_token)
         url = f"{self.base_url}/chat/completions"
@@ -216,6 +221,7 @@ class CompletionService:
         chat_type: str = "t2t",
         sub_chat_type: str = "t2t",
         chat_mode: str = "normal",
+        size: str = None,
         temperature: float = 1.0,
         timeout: float = 60.0
     ) -> Any:
@@ -231,7 +237,8 @@ class CompletionService:
             chat_type=chat_type,
             sub_chat_type=sub_chat_type,
             chat_mode=chat_mode,
-            temperature=temperature
+            temperature=temperature,
+            size=size
         )
         headers = self.cookie_service.get_headers(auth_token)
         url = f"{self.base_url}/chat/completions"
@@ -245,8 +252,9 @@ class CompletionService:
                     detail=f"请求失败: {resp.text}"
                 )
             response_data = resp.json()
-            return self._format_nonstream_response(
+            formated_response = self._format_nonstream_response(
                 response_data=response_data,
                 model=model,
                 messages=messages
             )
+            return formated_response, response_data

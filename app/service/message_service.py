@@ -1,14 +1,61 @@
+# app/service/message_service.py
+
 import json
 from typing import Dict, List, Any
 from app.models.chat import ChatRequest
 from app.service.completion_service import CompletionService
 from app.service.model_service import ModelService
+from app.service.task_service import TaskService
+from app.core.cookie_service import CookieService
 from fastapi.responses import StreamingResponse
+from app.core.logger.logger import get_logger
+
+# 新增导入
+from app.service.upload_service import UploadService
+
+logger = get_logger(__name__)
+
+
+# -- 新增基础处理函数 --
+async def process_user_images(msgs: list, auth_token: str, upload_service: UploadService):
+    """
+    将user消息中的base64类型图片上传OSS，替换成合法图片url
+    """
+    for msg in msgs:
+        if msg.get("role") != "user":
+            continue
+        content = msg.get("content")
+        if not isinstance(content, list):
+            continue
+        new_content = []
+        for item in content:
+            if item.get("type") == "image_url":
+                image_url = item.get("image_url", {}).get("url", "")
+                if image_url.startswith("data:image/"):  # base64 格式
+                    try:
+                        img_url = await upload_service.save_url(image_url, auth_token)
+                        if img_url:
+                            new_content.append({"type": "image", "image": img_url})
+                            continue  # 跳过原item
+                    except Exception as e:
+                        logger.warning(f"Base64图片上传失败:{e}")
+            new_content.append(item)
+        msg["content"] = new_content
+
 
 class MessageService:
-    def __init__(self, model_service: ModelService, completion_service: CompletionService):
+    def __init__(
+        self,
+        model_service: ModelService,
+        completion_service: CompletionService,
+        cookie_service: CookieService,
+        upload_service: UploadService,   # 新增
+    ):
         self.model_service = model_service
         self.completion_service = completion_service
+        self.cookie_service = cookie_service
+        self.task_service = TaskService(cookie_service)
+        self.upload_service = upload_service    # 新增
 
     async def chat(
         self,
@@ -17,6 +64,12 @@ class MessageService:
     ):
         model = client_payload.model
         messages = [msg.dict() for msg in client_payload.messages]
+
+        # ========== 新增处理：base64 image_url替换 ==========
+        await process_user_images(messages, auth_token, self.upload_service)
+        print("图片处理")
+        # ==================================================
+
         temperature = client_payload.temperature if client_payload.temperature is not None else 1.0
         stream = client_payload.stream if client_payload.stream is not None else True
 
@@ -27,8 +80,11 @@ class MessageService:
         feature_config = model_config["message"].get("feature_config", {})
         message_chat_type = model_config["message"].get("chat_type", "normal")
         task_type = await self.model_service.get_task_type(model)
-        if task_type == 't2i' or task_type == 't2v':
+        size = model_config["completion"].get("size")
+        # 对于t2i和t2v任务，强制使用非流式响应
+        if task_type in ('t2i', 't2v'):
             stream = False
+
         total_len = len(messages)
         qwen_messages = []
         for idx, m in enumerate(messages):
@@ -40,10 +96,8 @@ class MessageService:
             qwen_messages.append(m2)
 
         real_model = await self.model_service.get_real_model(model)
-
-
+        #logger.info(f"qwen_messages: {qwen_messages}")
         if stream:
-            # === 关键点：直接用 CompletionService 的 "流式" async 生成器 ===
             stream_gen = self.completion_service.stream_completion(
                 messages=qwen_messages,
                 auth_token=auth_token,
@@ -53,10 +107,12 @@ class MessageService:
                 sub_chat_type=sub_chat_type,
                 chat_mode=chat_mode,
                 temperature=temperature,
+                size=size
             )
             return StreamingResponse(stream_gen, media_type="text/event-stream")
         else:
-            result = await self.completion_service.chat_completion(
+            #logger.info(f"非流式请求")
+            result, response_data = await self.completion_service.chat_completion(
                 messages=qwen_messages,
                 auth_token=auth_token,
                 model=real_model,
@@ -65,8 +121,66 @@ class MessageService:
                 sub_chat_type=sub_chat_type,
                 chat_mode=chat_mode,
                 temperature=temperature,
+                size=size
             )
-            return self._format_sync_response(result)
+            #print(f"result: {result}")
+            #print(f"response_data: {response_data}")
+
+            # 处理任务型响应（t2i和t2v）
+            task_result = None
+            if task_type in ('t2i', 't2v'):
+                task_id = self._extract_task_id(response_data)
+                if not task_id:
+                    return {
+                        "chat_type": task_type,
+                        "task_status": "failed",
+                        "message": "未能获取任务ID",
+                        "remaining_time": "",
+                        "content": ""
+                    }
+
+                # 根据任务类型选择合适的轮询方法
+                if task_type == 't2i':
+                    task_result = await self.task_service.poll_image_task(
+                        task_id=task_id,
+                        auth_token=auth_token
+                    )
+                else:  # t2v
+                    task_result = await self.task_service.poll_video_task(
+                        task_id=task_id,
+                        auth_token=auth_token
+                    )
+                print(f"task_result: {task_result}")
+            if task_result:
+                print(self._format_sync_response(task_result))
+                return self._format_sync_response(task_result)
+            else:
+                print(self._format_sync_response(result))
+                return self._format_sync_response(result)
+
+    def _extract_task_id(self, response: Dict[str, Any]) -> str:
+        """
+        从响应中提取任务ID
+
+        Args:
+            response: 完整的响应数据
+
+        Returns:
+            str: 任务ID，如果未找到则返回空字符串
+        """
+        try:
+            messages = response.get("messages", [])
+            if not messages:
+                return ""
+
+            # 获取最后一条消息
+            last_message = messages[-1]
+            task_id = last_message.get("extra", {}).get("wanx", {}).get("task_id")
+            if task_id:
+                return task_id
+        except Exception:
+            pass
+        return ""
 
     def _format_sync_response(self, qwen_response: dict):
         if not qwen_response or "choices" not in qwen_response:
@@ -83,5 +197,5 @@ class MessageService:
             if i == len(think_idx) - 1:
                 content = f"{content}</think>"
             choices[idx]["message"]["content"] = content
-            choices[idx]["modelextra"] = {"reasoning_content": choices[idx]["message"]["content"].replace("<think>","").replace("</think>","")}
+            choices[idx]["modelextra"] = {"reasoning_content": choices[idx]["message"]["content"].replace("<think>", "").replace("</think>", "")}
         return qwen_response

@@ -9,7 +9,7 @@ from app.core.logger.logger import get_logger
 from app.core.cookie_service import CookieService
 from app.core.account_manager import AccountManager
 from app.core.config_manager import ConfigManager
-
+config_manager = ConfigManager()
 
 logger = get_logger(__name__)
 
@@ -89,13 +89,14 @@ class ModelService:
                 'chat_type': 't2i',
                 'sub_chat_type': 't2i',
                 'chat_mode': 'normal',
-                'stream': False
+                'stream': False,
+                'size': config_manager.get("image.size", "1:1")
             },
             'message': {
                 'chat_type': 't2i',
                 'feature_config': {
                 'thinking_enabled': False,
-                'output_schema': None
+                'output_schema': 'phase'
             }}
         },
         'video': {  # 视频生成模式配置
@@ -103,13 +104,14 @@ class ModelService:
                 'chat_type': 't2v',
                 'sub_chat_type': 't2v',
                 'chat_mode': 'normal',
-                'stream': False
+                'stream': False,
+                'size': config_manager.get("video.size", "1280x720")
             },
             'message': {
                 'chat_type': 't2v',
                 'feature_config': {
                 'thinking_enabled': False,
-                'output_schema': None
+                'output_schema': 'phase'
             }
         }}
         # 还有artifacts，不过没什么用就不加了

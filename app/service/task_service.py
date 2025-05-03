@@ -6,8 +6,11 @@ import asyncio
 import json
 from app.core.logger.logger import get_logger
 from app.core.cookie_service import CookieService
-from app.core.account_manager import AccountManager
-
+import httpx
+import time
+from app.core.config_manager import ConfigManager
+import uuid
+config_manager = ConfigManager()
 logger = get_logger(__name__)
 
 class TaskService:
@@ -21,7 +24,7 @@ class TaskService:
             cookie_service: CookieService实例，用于获取认证信息
         """
         self.cookie_service = cookie_service
-        self.base_url = "https://chat.qwen.ai/api"
+        self.base_url = config_manager.get("api.url","https://chat.qwen.ai/api")
         
     async def poll_image_task(
         self,
@@ -106,8 +109,7 @@ class TaskService:
         Returns:
             Dict[str, Any]: 任务状态和结果
         """
-        import httpx
-        import time
+
         
         start_time = time.time()
         retry_count = 0
@@ -218,8 +220,40 @@ class TaskService:
             "content": content
         }
         
-        # 如果是成功的图片任务，使用markdown格式
+        # 如果是成功的图片任务，使用openai格式返回
         if status == "success" and task_type == "t2i" and content:
-            response["content"] = f"![Generated Image]({content})"
+            response = {
+                'id': 'chatcmpl-'+uuid.uuid4().hex,
+                'object': 'chat.completion',
+                'created': int(time.time()*1000),
+                'model': 'qwen-turbo', 
+                'choices': [
+                    {'index': 0, 
+                     'message':
+                       {
+                           'role': 'assistant', 
+                           'content': f"![Generated Image]({content})"
+                           }, 
+                           'finish_reason': 'stop'
+                           }
+                           ], 'usage': {'prompt_tokens': 0, 'completion_tokens': 0, 'total_tokens': 0}}
+        elif status == "success" and task_type == "t2v" and content:
+            response = {
+                'id': 'chatcmpl-'+uuid.uuid4().hex,
+                'object': 'chat.completion',
+                'created': int(time.time()*1000),
+                'model': 'qwen-turbo', 
+                'choices': [
+                    {'index': 0, 
+                     'message':
+                       {
+                           'role': 'assistant', 
+                           'content': f"[链接]({content})"
+                           }, 
+                           'finish_reason': 'stop'
+                           }
+                           ], 
+                           'usage': 
+                           {'prompt_tokens': 0, 'completion_tokens': 0, 'total_tokens': 0}}
             
         return response

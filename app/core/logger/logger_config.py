@@ -4,7 +4,7 @@ from app.core.config_manager import ConfigManager
 
 def configure_logging():
     """
-    配置全局日志系统，并为 AI 模块添加单独的日志文件
+    配置全局日志系统
     """
     # 获取配置
     config_manager = ConfigManager()

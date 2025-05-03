@@ -5,8 +5,6 @@ import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-import time
-import platform
 
 from app.router.account import router as account_router
 from app.router.model import router as model_router
