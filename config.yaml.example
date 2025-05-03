@@ -1,0 +1,27 @@
+api:
+  api_keys:
+  - C00NDlkLTljMGEtN2NhMzI5MGUxY2VlIiwicmVzb3VyY2VfaWQiOiJlMGZiN2YzMS00Zjc1LTQyM
+  debug: false
+  enable_api_key: false
+  host: 0.0.0.0
+  port: 2778
+  reload: true
+  url: https://chat.qwen.ai/api
+  workers: 1
+chat:
+  model: qwen-max-latest
+  search_info_mode: table
+image:
+  model: qwen-max-latest-draw
+  size: '1:1'
+  # 图片尺寸，可选值：1:1, 16:9, 4:3, 3:4, 9:16
+log:
+  file_path: logs/app.log
+  level: INFO
+upload:
+  enable: true
+  max_size: 10
+  save_path: uploads
+video:
+  model: qwen-max-latest-video
+  size: 1280x720

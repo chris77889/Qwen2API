@@ -101,7 +101,8 @@ class CompletionService:
                                 return
                             try:
                                 data_json = json.loads(payload)
-                                logger.info(f"流式响应: {data_json}")
+                                #logger.info(f"流式响应: {data_json}")
+                                # 打印流式响应
                                 for choice in data_json.get("choices", []):
                                     delta = choice.get("delta", {})
                                     seg = delta.get("content", "")

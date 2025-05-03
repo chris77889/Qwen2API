@@ -1,16 +1,30 @@
 # Qwen2API
 
-通义千问 API 的Python版本实现，基于FastAPI和httpx，提供与原JavaScript版本相同的功能。
+通义千问 API 的Python版本实现，基于FastAPI和httpx。
+
+> [!NOTE]  
+> 由于代码整体全部重构，部分功能可能会不正常。
+
+> [!IMPORTANT]  
+> 请将原本的配置文件 **accounts.yml** 和 **config.yaml** 从主目录移到到 **config** 目录下
+
+> [!IMPORTANT]  
+> 数据已移动至 **data** 目录下存储，包括
+> - model.json 模型配置文件
+> - upload.json 缓存的图片 SHA256 URL 对应关系
 
 ## 功能特点
 
-- 支持通义千问全部模型
-- 支持流式输出
-- 支持思考过程显示
-- 支持搜索功能
-- 支持图像生成
-- 支持视频生成
-- 支持多账户轮询调度
+- [X] 支持通义千问全部模型
+- [X] 支持流式输出
+- [X] 支持思考过程显示
+- [X] 支持搜索功能
+- [X] 支持图像生成
+- [X] 支持视频生成
+- [X] 支持多账户轮询调度
+- [X] 支持缓存上传图片URL，无需等待过久
+- [ ] 前端管理
+- [ ] Docker镜像支持
 
 ## 环境要求
 
@@ -30,7 +44,9 @@ pip install -r requirements.txt
 
 ### 2. 配置文件
 
-配置文件在第一次启动会自动生成。
+> [!IMPORTANT]  
+> 配置文件现在不会自动生成。
+> 请复制 config.yaml.example 去除 example 后缀，并修改，得到你的配置文件 config.yaml ，**放入 config 文件夹中**
 
 ### 3. 启动服务
 

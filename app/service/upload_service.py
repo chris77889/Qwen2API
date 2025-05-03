@@ -25,66 +25,74 @@ UPLOAD_CACHE_FILE = os.path.join('data', 'upload.json')
 
 class UploadService:
     """
-    上传服务 - 仅支持OSS上传，并对文件做SHA256去重缓存
+    上传服务，不依赖initialize，缓存操作fire&forget，主流程100%不会阻塞/卡死/报协程警告
     """
-
     def __init__(self):
-        self.upload_cache = {}               # sha256: url
+        self.upload_cache = {}
         self.cache_loaded = False
         self.cache_lock = asyncio.Lock()
+        self._load_cache_launched = False
+
         if not os.path.exists('data'):
             os.makedirs('data', exist_ok=True)
-
-    async def initialize(self):
-        """异步初始化方法，必须显示调用一次"""
-        await self._load_cache()
+        # 不要在 __init__ 调用任何异步任务！
 
     async def _file_sha256(self, image_bytes: bytes) -> str:
         return hashlib.sha256(image_bytes).hexdigest()
 
-    async def _load_cache(self):
-        async with self.cache_lock:
-            try:
-                if not os.path.exists(UPLOAD_CACHE_FILE):
-                    self.upload_cache = {}
-                else:
-                    async with aiofiles.open(UPLOAD_CACHE_FILE, 'r', encoding='utf-8') as f:
-                        content = await f.read()
-                        if content.strip():
-                            self.upload_cache = json.loads(content)
-                        else:
-                            self.upload_cache = {}
-                self.cache_loaded = True
-            except Exception as e:
-                logger.error(f"加载上传缓存失败: {str(e)}")
-                self.upload_cache = {}
-                self.cache_loaded = True   # 出异常也不能一直卡死
-
-    async def _save_cache(self):
+    async def _background_load_cache(self):
+        # 后台真正懒加载缓存（只在事件循环内调用，不会在__init__强制调动）
+        if self.cache_loaded or self._load_cache_launched:
+            return
+        self._load_cache_launched = True
         try:
             async with self.cache_lock:
-                async with aiofiles.open(UPLOAD_CACHE_FILE, 'w', encoding='utf-8') as f:
-                    await f.write(json.dumps(self.upload_cache, ensure_ascii=False, indent=2))
+                if os.path.exists(UPLOAD_CACHE_FILE):
+                    async with aiofiles.open(UPLOAD_CACHE_FILE, 'r', encoding='utf-8') as f:
+                        content = await f.read()
+                        self.upload_cache = json.loads(content) if content.strip() else {}
+                else:
+                    self.upload_cache = {}
         except Exception as e:
-            logger.error(f"保存上传缓存失败: {e}")
+            logger.warning(f"后台加载upload_cache失败: {e}")
+            self.upload_cache = {}
+        self.cache_loaded = True
 
-    async def _check_or_set_upload_cache(self, image_bytes: bytes, url: str = None, timeout=5) -> Optional[str]:
-        """
-        检查或写入sha256缓存。等待加载最多 timeout 秒，否则抛错！
-        """
-        waited = 0
-        while not self.cache_loaded:
-            await asyncio.sleep(0.05)
-            waited += 0.05
-            if waited >= timeout:
-                raise TimeoutError("上传缓存加载超时")
-        sha256_digest = await self._file_sha256(image_bytes)
-        async with self.cache_lock:
+    def _save_cache_background(self):
+        async def _do_save():
+            try:
+                async with self.cache_lock:
+                    async with aiofiles.open(UPLOAD_CACHE_FILE, 'w', encoding='utf-8') as f:
+                        await f.write(json.dumps(self.upload_cache, ensure_ascii=False, indent=2))
+            except Exception as e:
+                logger.warning(f"异步写upload_cache失败: {e}")
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(_do_save())
+        except RuntimeError:
+            # 事件循环未开启，直接跳过
+            pass
+
+    async def _check_or_set_upload_cache(self, image_bytes: bytes, url: str = None) -> Optional[str]:
+        # 永远不等待缓存加载，没加载就fire一次后台（只fire不等，安全）
+        if not self.cache_loaded and not self._load_cache_launched:
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(self._background_load_cache())
+            except RuntimeError:
+                pass # 没有事件循环，服务启动期不用缓存
+            return None
+        if not self.cache_loaded:
+            return None
+        try:
+            sha256_digest = await self._file_sha256(image_bytes)
             if sha256_digest in self.upload_cache:
                 return self.upload_cache[sha256_digest]
             if url:
                 self.upload_cache[sha256_digest] = url
-                await self._save_cache()
+                self._save_cache_background()
+        except Exception as e:
+            logger.warning(f'上传缓存操作异常: {e}')
         return None
 
     def _calculate_signature(self, sts_response: dict, date: str) -> str:
@@ -139,7 +147,7 @@ class UploadService:
                     logger.error(error_msg)
                     return None
                 sts_data = sts_response.json()
-                logger.info(f"获取到的STS Token响应: {json.dumps(sts_data, indent=2)}")
+                #logger.info(f"获取到的STS Token响应: {json.dumps(sts_data, indent=2)}")
 
             credentials_provider = oss.credentials.StaticCredentialsProvider(
                 access_key_id=sts_data['access_key_id'],
@@ -157,7 +165,7 @@ class UploadService:
                 body=image_bytes,
                 content_type='image/jpeg'
             )
-            logger.info(f"开始上传图片到OSS: {sts_data['bucketname']}/{sts_data['file_path']}")
+            #logger.info(f"开始上传图片到OSS: {sts_data['bucketname']}/{sts_data['file_path']}")
             response = client.put_object(put_object_request)
             if response.status_code == 200:
                 logger.info(f"图片上传成功，URL: {sts_data['file_url']}")
@@ -198,24 +206,18 @@ class UploadService:
                         return None
                     image_bytes = response.content
 
-            # 查缓存
-            try:
-                cached_url = await asyncio.wait_for(self._check_or_set_upload_cache(image_bytes), timeout=5)
-            except Exception as e:
-                logger.error(f"check/set upload cache超时或失败: {e}")
-                cached_url = None
-
+            # 判重（缓存未加载/失败不影响业务）
+            cached_url = await self._check_or_set_upload_cache(image_bytes)
             if cached_url:
                 logger.info(f"缓存命中：SHA256={await self._file_sha256(image_bytes)} / URL={cached_url}")
                 return cached_url
 
-            # 上传
             uploaded_url = await asyncio.wait_for(self._upload_to_oss(image_bytes, auth_token), timeout=30)
             if uploaded_url:
                 try:
-                    await asyncio.wait_for(self._check_or_set_upload_cache(image_bytes, url=uploaded_url), timeout=5)
+                    await self._check_or_set_upload_cache(image_bytes, url=uploaded_url)
                 except Exception as e:
-                    logger.error(f"上传后写缓存失败: {e}")
+                    logger.warning(f"上传后写缓存失败: {e}")
                 return uploaded_url
 
             return None
