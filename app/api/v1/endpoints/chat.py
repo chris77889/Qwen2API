@@ -17,7 +17,6 @@ from app.services.account import account_manager
 from app.services.request import request_service
 from app.services.upload import upload_service
 from app.services.image import image_service
-from app.utils.json import is_json
 from app.core.logger import logger
 
 router = APIRouter()

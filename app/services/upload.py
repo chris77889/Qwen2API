@@ -1,61 +1,28 @@
 """
 上传服务
 """
-from typing import Dict, Any, Optional, List
-import os
-import shutil
+from typing import Optional
 import uuid
 import httpx
-from pathlib import Path
-from fastapi import UploadFile
 import json
 import traceback
 import alibabacloud_oss_v2 as oss
+import base64
+from hmac import HMAC
+from hashlib import sha256
 
 from ..core.config import config_manager
-from .request import request_service
 from .account import account_manager
 from ..core.logger import logger
 
 
 class UploadService:
-    """上传服务"""
+    """上传服务 - 仅支持OSS上传"""
     
     def __init__(self):
         """初始化上传服务"""
-        self.config = config_manager.get_upload_config()
-        self.save_path = Path(self.config.get('save_path', 'uploads'))
-        self.save_path.mkdir(exist_ok=True)
-        
-    def is_allowed_file(self, filename: str) -> bool:
-        """
-        检查文件是否允许上传
-        
-        Args:
-            filename: 文件名
-            
-        Returns:
-            bool: 是否允许上传
-        """
-        if not self.config.get('enable', True):
-            return False
-            
-        extension = filename.split('.')[-1].lower()
-        return extension in self.config.get('allowed_types', config_manager.CONSTANTS["ALLOWED_FILE_TYPES"])
-    
-    def is_allowed_size(self, file_size: int) -> bool:
-        """
-        检查文件大小是否允许
-        
-        Args:
-            file_size: 文件大小(字节)
-            
-        Returns:
-            bool: 是否允许上传
-        """
-        max_size_bytes = self.config.get('max_size', 10) * 1024 * 1024  # MB to bytes
-        return file_size <= max_size_bytes
-    
+        pass
+
     def _calculate_signature(self, sts_response: dict, date: str) -> str:
         """
         计算OSS签名
@@ -67,9 +34,6 @@ class UploadService:
         Returns:
             str: 计算得到的签名
         """
-        from hmac import HMAC
-        from hashlib import sha256
-        
         # 获取日期和区域
         date_stamp = date[:8]  # 20250325
         region = sts_response['region'].replace('oss-', '')  # 从 'oss-ap-southeast-1' 提取为 'ap-southeast-1'
@@ -154,7 +118,7 @@ class UploadService:
             credentials_provider = oss.credentials.StaticCredentialsProvider(
                 access_key_id=sts_data['access_key_id'],
                 access_key_secret=sts_data['access_key_secret'],
-                security_token=sts_data['security_token'],
+                security_token=sts_data['security_token']
             )
 
             # 加载SDK的默认配置，并设置凭证提供者
@@ -195,7 +159,7 @@ class UploadService:
 
     async def save_url(self, url: str, auth_token: Optional[str] = None) -> Optional[str]:
         """
-        保存URL指向的图像
+        保存URL指向的图像到OSS
         
         Args:
             url: 图像URL
@@ -217,7 +181,6 @@ class UploadService:
             if url.startswith('data:'):
                 logger.info("处理base64格式的图像数据")
                 # 从data URL中提取MIME类型和数据
-                import base64
                 matches = url.split(';base64,')
                 if len(matches) == 2:
                     base64_data = matches[1]
@@ -244,123 +207,6 @@ class UploadService:
             error_stack = traceback.format_exc()
             logger.error(f"处理图像URL失败: {str(e)}\n堆栈跟踪:\n{error_stack}")
             return None
-    
-    async def save_file(self, file: UploadFile) -> Dict[str, Any]:
-        """
-        保存上传的文件
-        
-        Args:
-            file: 上传的文件
-            
-        Returns:
-            Dict[str, Any]: 保存结果
-        """
-        try:
-            # 检查文件类型
-            if not self.is_allowed_file(file.filename):
-                return {
-                    "success": False,
-                    "error": "不支持的文件类型"
-                }
-                
-            # 检查文件大小
-            file_size = len(await file.read())
-            await file.seek(0)  # 重置文件指针
-            
-            if not self.is_allowed_size(file_size):
-                max_size = self.config.get('max_size', 10)
-                return {
-                    "success": False,
-                    "error": f"文件大小超过限制 ({max_size}MB)"
-                }
-                
-            # 生成保存路径
-            save_path = self.save_path / file.filename
-            
-            # 如果文件已存在，添加序号
-            counter = 1
-            while save_path.exists():
-                name, ext = os.path.splitext(file.filename)
-                save_path = self.save_path / f"{name}_{counter}{ext}"
-                counter += 1
-                
-            # 保存文件
-            with open(save_path, "wb") as f:
-                shutil.copyfileobj(file.file, f)
-                
-            # 上传到通义千问
-            if save_path.suffix.lower() in config_manager.CONSTANTS["ALLOWED_FILE_TYPES"][:5]:  # 只处理文档类型
-                try:
-                    response = await request_service.upload_file(str(save_path))
-                    return {
-                        "success": True,
-                        "file_path": str(save_path),
-                        "file_id": response.get('file_id')
-                    }
-                except Exception as e:
-                    return {
-                        "success": True,
-                        "file_path": str(save_path),
-                        "error": f"文件上传到通义千问失败: {str(e)}"
-                    }
-            
-            return {
-                "success": True,
-                "file_path": str(save_path)
-            }
-            
-        except Exception as e:
-            return {
-                "success": False,
-                "error": f"文件保存失败: {str(e)}"
-            }
-    
-    def get_file_path(self, filename: str) -> Optional[Path]:
-        """
-        获取文件路径
-        
-        Args:
-            filename: 文件名
-            
-        Returns:
-            Optional[Path]: 文件路径
-        """
-        file_path = self.save_path / filename
-        return file_path if file_path.exists() else None
-    
-    def list_files(self) -> List[Dict[str, Any]]:
-        """
-        获取所有文件列表
-        
-        Returns:
-            List[Dict[str, Any]]: 文件信息列表
-        """
-        files = []
-        for f in self.save_path.glob("*"):
-            if f.is_file():
-                files.append({
-                    "name": f.name,
-                    "size": f.stat().st_size,
-                    "modified": f.stat().st_mtime
-                })
-        return files
-    
-    def delete_file(self, filename: str) -> bool:
-        """
-        删除文件
-        
-        Args:
-            filename: 文件名
-            
-        Returns:
-            bool: 是否成功删除
-        """
-        file_path = self.get_file_path(filename)
-        if file_path:
-            file_path.unlink()
-            return True
-        return False
 
-
-# 创建全局上传服务实例
+# 创建服务实例
 upload_service = UploadService() 
