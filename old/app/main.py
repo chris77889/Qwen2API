@@ -8,14 +8,11 @@ from fastapi.responses import JSONResponse
 import time
 import platform
 
-from app.router.account import router as account_router
-from app.core.logger.logger import get_logger
-from app.core.config_manager import ConfigManager
-from app.core.account_manager import AccountManager
+from .api.v1.api import api_router
+from .core.config import config_manager
+from .core.logger import logger
+from .services.account import account_manager
 
-logger = get_logger(__name__)
-config_manager = ConfigManager()
-account_manager = AccountManager()
 # 创建FastAPI实例
 app = FastAPI(
     title="通义千问 API",
@@ -33,7 +30,7 @@ app.add_middleware(
 )
 
 # 注册API路由
-app.include_router(account_router, prefix="/accounts")
+app.include_router(api_router, prefix="/v1")
 
 
 def get_start_info() -> str:
@@ -66,7 +63,7 @@ if __name__ == "__main__":
     service_port = config_manager.get("api.port", 8000)
     
     # 打印启动信息
-    logger.info(get_start_info())
+    print(get_start_info())
     
     # 启动服务器
     uvicorn.run(

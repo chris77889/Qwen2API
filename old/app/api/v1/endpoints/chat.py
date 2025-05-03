@@ -25,25 +25,30 @@ async def chat_completions(
 ):
     auth_token = account_manager.get_account_token()
     stream = request.stream if request.stream is not None else False
-    messages = [m.dict() for m in request.messages]
     model = request.model
 
-    # 文件型图片自动上传转url
+    # === [1] 保证原messages所有历史全保留 ===
+    messages = [m.dict() for m in request.messages]
+
+    # === [2] 只对messages中每条需要的内容做变更，尤其最后一轮图片特殊处理 ===
     if messages and isinstance(messages[-1].get('content', ''), list):
-        for idx, item in enumerate(messages[-1]['content']):
+        last_content = messages[-1]['content']
+        # 逐item做图片url本地上传改写，其它内容均原样保留
+        for idx, item in enumerate(last_content):
             if item.get('type') == 'image_url' and item.get('image_url', {}).get('url'):
                 file_url = await upload_service.save_url(item['image_url']['url'], auth_token)
+                # 替换本条为 image
                 messages[-1]['content'][idx] = {
                     "type": "image",
                     "image": file_url
                 }
 
     try:
-        # -------- 图像请求（含流/非流） --------
+        # -------- 图像请求 --------
         if '-draw' in model:
             size = config_manager.get('image.size', '1024*1024')
             resp = await image_service.generate(
-                messages=messages,
+                messages=messages,        # << 全量messages, 允许被自定义结构规整
                 model=model,
                 size=size,
                 auth_token=auth_token
@@ -67,25 +72,15 @@ async def chat_completions(
                     media_type="application/json"
                 )
 
-        # -------- 视频请求（含流/非流） --------
+        # -------- 视频请求 --------
         if '-video' in model:
             size = config_manager.get('video.size', '1280x720')
-            # 多模态拼接为纯文本
-            last_content = messages[-1].get('content', '')
-            if isinstance(last_content, list):
-                prompt = ' '.join([item.get('text', '') for item in last_content if item.get('type') == 'text'])
-            else:
-                prompt = last_content
-
-            msg = [{
-                "role": "user",
-                "content": prompt,
-                "chat_type": "t2v",
-                "extra": {},
-                "feature_config": {"thinking_enabled": False}
-            }]
+            # ===【不要拼接prompt！全量messages传递】===
             resp = await video_service.generate(
-                messages=msg, model=model, size=size, auth_token=auth_token
+                messages=messages,    # << 也是全量，每条可带图片/文本等结构，底层保证够用
+                model=model,
+                size=size,
+                auth_token=auth_token
             )
             if resp.get('status') != 200:
                 return Response(
@@ -109,7 +104,7 @@ async def chat_completions(
         # -------- 普通对话 --------
         response_data = await request_service.chat_completion(
             model=model,
-            messages=messages,
+            messages=messages,         # << 全量上下文！
             stream=stream,
             auth_token=auth_token,
             temperature=request.temperature
@@ -128,7 +123,6 @@ async def chat_completions(
                 media_type="application/json"
             )
         if stream:
-            # 把原本的 stream_response_generator(exist_code里的)直接整合进 request_service 层，外部直接 yield bytes
             return StreamingResponse(
                 response_data.get('response'),
                 media_type="text/event-stream",
@@ -138,7 +132,6 @@ async def chat_completions(
                 }
             )
         else:
-            # 非流通用输出，适配OpenAI协议（可以用你本来的格式）
             resp = response_data.get('response')
             body_template = {
                 "id": f"chatcmpl-{uuid.uuid4()}",

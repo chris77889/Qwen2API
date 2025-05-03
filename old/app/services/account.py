@@ -9,8 +9,8 @@ import time
 import hashlib
 import json
 
-from ..core.config import config_manager
-from ..core.logger import logger
+from app.core.config_manager import ConfigManager
+from app.core.logger.logger import logger
 
 
 class AccountManager:

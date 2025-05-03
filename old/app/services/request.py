@@ -10,7 +10,41 @@ import traceback
 from ..core.config import config_manager
 from .account import account_manager
 from ..core.logger import logger
+from .upload import upload_service
+def fix_messages_for_phase(messages: list) -> list:
+    """
+    将所有 assistant/phase/思考模式历史自动转换成 content_list 格式以适配通义千问API。
+    user 消息原样透传。
+    assistant 普通消息也自动加 content_list, 官方API更稳健。
+    """
+    fixed = []
+    for msg in messages:
+        m = dict(msg)  # 避免原地变
+        if m.get("role") == "assistant":
+            feature_config = (m.get("feature_config") or {})
+            need_phase = (
+                feature_config.get("output_schema") == "phase" 
+                or feature_config.get("thinking_enabled") 
+                or "think" in m.get("content", "")  # 有时候答案里带<think>等
+            )
+            already_list = "content_list" in m
 
+            if need_phase or already_list:
+                # 【标准格式】
+                content_val = m.get("content", "")
+                if "content_list" not in m:
+                    m["content_list"] = [{
+                        "phase": "answer",
+                        "content": content_val,
+                        "chat_type": m.get("chat_type", "t2t")
+                    }]
+                # 千问要求: 有 content_list 时 content 要为空
+                m["content"] = ""
+            # 千问 API 更健壮，不丢 feature_config/output_schema
+            if need_phase and not feature_config.get("output_schema"):
+                m.setdefault("feature_config", {})["output_schema"] = "phase"
+        fixed.append(m)
+    return fixed
 class RequestService:
     """统一的请求服务"""
 
@@ -102,15 +136,15 @@ class RequestService:
             if model:
                 model = model.replace('-draw', '').replace('-thinking', '').replace('-search', '').replace('-video', '')
             else:
-                model = config_manager.CONSTANTS["QWEN_IMAGE_MODEL"]
+                model = config_manager.get("image.model", "qwen-max-latest")
         elif media_type == "video":
-            size_map = config_manager.CONSTANTS.get("VIDEO_SIZES", ['1280x720'])
+            size_map = config_manager.get("video.size", ['1280x720'])
             size = size if size in size_map else "1280x720"
             chat_type = "t2v"
             if model:
                 model = model.replace('-video', '').replace('-thinking', '').replace('-search', '').replace('-draw', '')
             else:
-                model = config_manager.CONSTANTS["QWEN_VIDEO_MODEL"]
+                model = config_manager.get("video.model", "qwen-max-latest")
         else:
             raise Exception("媒体类型错误")
 
@@ -370,16 +404,18 @@ class RequestService:
                                 image_data = item.get('image_url', {}).get('url', '')
                                 if image_data:
                                     # 上传图像URL，按你的upload_service方式留二次改造
+                                    url = await upload_service.save_url(image_data, auth_token)
                                     processed_content.append({
                                         "type": "image",
-                                        "image": image_data
+                                        "image": url
                                     })
                             elif item.get('type') == 'image':
                                 image_data = item.get('image', '')
+                                url = await upload_service.save_url(image_data, auth_token)
                                 if image_data:
                                     processed_content.append({
                                         "type": "image",
-                                        "image": image_data
+                                        "image": url
                                     })
                         processed_message['content'] = processed_content
                     else:
@@ -398,7 +434,7 @@ class RequestService:
             if not processed_messages:
                 raise ValueError("处理后的消息列表为空")
 
-            chat_model = model or config_manager.get('chat.model', config_manager.CONSTANTS["QWEN_DEFAULT_MODEL"])
+            chat_model = model or config_manager.get('chat.model', config_manager.get("qwen.default_model", "qwen-max-latest"))
             chat_type = "t2t"
             # 除去模型后缀
             if '-thinking' in chat_model:
@@ -414,7 +450,9 @@ class RequestService:
                 if isinstance(last_message, dict):
                     session_id = last_message.get('session_id')
                     chat_id = last_message.get('chat_id')
-
+            
+            processed_messages = fix_messages_for_phase(processed_messages)
+            print(processed_messages)
             data = {
                 "model": chat_model,
                 "messages": processed_messages,
@@ -464,6 +502,20 @@ class RequestService:
                                         break
                                     try:
                                         data_json = json.loads(payload)
+                                        # 遍历所有assistant消息, 适配为openai的content格式
+                                        for choice in data_json.get("choices", []):
+                                            for msg in choice.get("messages", []):
+                                                if msg.get("role") == "assistant" and "content_list" in msg:
+                                                    content = ""
+                                                    for item in msg["content_list"]:
+                                                        if item.get("phase") == "answer":
+                                                            content = item.get("content", "")
+                                                            break
+                                                    if not content and msg["content_list"]:
+                                                        content = msg["content_list"][0].get("content", "")
+                                                    msg["content"] = content
+                                                    msg.pop("content_list", None)
+                                        
                                         # 你也可以直接 yield，只做 minimal 重新编码，但最好确保 "choices" 存在
                                         yield f"data: {json.dumps(data_json, ensure_ascii=False)}\n\n".encode("utf-8")
                                     except Exception as e:

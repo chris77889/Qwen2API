@@ -1,90 +1,73 @@
-"""
-安全服务模块
-
-提供基于 FastAPI security 的多认证机制支持
-"""
-from typing import Optional, List
-from fastapi import Depends, HTTPException, Security
+from typing import Optional
+from fastapi import HTTPException, Security, Depends
 from fastapi.security import APIKeyHeader, HTTPBearer, HTTPAuthorizationCredentials
-from starlette.status import HTTP_401_UNAUTHORIZED, HTTP_403_FORBIDDEN
+from starlette.status import HTTP_403_FORBIDDEN
+from loguru import logger
 
-from .config import config_manager
+from .config_manager import ConfigManager
 
+# 创建认证处理器
+api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+bearer_auth = HTTPBearer(auto_error=False)
 
-class MultiAuth:
-    """多认证方式支持"""
+async def verify_api_key(
+    api_key_header: Optional[str] = Security(api_key_header),
+    bearer_auth: Optional[HTTPAuthorizationCredentials] = Security(bearer_auth),
+    config: ConfigManager = Depends(lambda: ConfigManager())
+) -> None:
+    """
+    验证API Key的依赖函数，支持两种方式：
+    1. Authorization: Bearer <api_key>
+    2. X-API-Key: <api_key>
     
-    def __init__(self):
-        """初始化多认证支持"""
-        self.api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
-        self.bearer_scheme = HTTPBearer(auto_error=False)
-        
-    def _is_api_key_valid(self, api_key: str) -> bool:
-        """
-        验证API密钥是否有效
-        
-        Args:
-            api_key: 要验证的API密钥
+    Args:
+        api_key_header: 从X-API-Key头获取的API Key
+        bearer_auth: 从Authorization头获取的Bearer凭证
+        config: 配置管理器实例
+    
+    Raises:
+        HTTPException: 当API Key验证失败时抛出
+    """
+    try:
+        # 检查是否启用了API Key认证
+        if not config.get("api.enable_api_key"):
+            return
             
-        Returns:
-            bool: API密钥有效返回True，否则返回False
-        """
-        # 从配置中获取有效的API密钥列表
-        valid_api_keys: List[str] = config_manager.get("api.api_keys", [])
-        return bool(valid_api_keys and api_key in valid_api_keys)
-        
-    async def __call__(
-        self,
-        api_key: Optional[str] = Security(APIKeyHeader(name="X-API-Key", auto_error=False)),
-        credentials: Optional[HTTPAuthorizationCredentials] = Security(HTTPBearer(auto_error=False))
-    ) -> Optional[str]:
-        """
-        验证认证信息
-        
-        Args:
-            api_key: API密钥
-            credentials: Bearer Token认证信息
+        # 获取API Key（优先使用Authorization header）
+        api_key = None
+        if bearer_auth:
+            api_key = bearer_auth.credentials
+        elif api_key_header:
+            api_key = api_key_header
             
-        Returns:
-            Optional[str]: 有效的认证令牌
-            
-        Raises:
-            HTTPException: 认证失败时抛出
-        """
-        if not config_manager.get("api.enable_api_key", True):
-            return None
-            
-        # 尝试API Key认证
-        if api_key:
-            if self._is_api_key_valid(api_key):
-                return api_key
+        if not api_key:
             raise HTTPException(
                 status_code=HTTP_403_FORBIDDEN,
-                detail="API密钥无效",
-                headers={"WWW-Authenticate": "ApiKey"}
+                detail="未提供API Key（支持Authorization: Bearer <api_key> 或 X-API-Key: <api_key>）"
             )
             
-        # 尝试Bearer Token认证
-        if credentials and credentials.scheme == "Bearer":
-            token = credentials.credentials
-            if self._is_api_key_valid(token):
-                return token
+        # 获取允许的API Keys列表
+        allowed_keys = config.get("api.api_keys")
+        if not isinstance(allowed_keys, list):
+            logger.error("配置错误：api.api_keys 必须是一个列表")
             raise HTTPException(
                 status_code=HTTP_403_FORBIDDEN,
-                detail="Bearer Token无效",
-                headers={"WWW-Authenticate": "Bearer"}
+                detail="API认证配置错误"
             )
             
-        # 未提供任何认证信息
+        # 验证API Key
+        if api_key not in allowed_keys:
+            logger.warning(f"无效的API Key尝试: {api_key[:8]}...")
+            raise HTTPException(
+                status_code=HTTP_403_FORBIDDEN,
+                detail="无效的API Key"
+            )
+            
+        logger.debug(f"API Key验证成功: {api_key[:8]}...")
+        
+    except KeyError as e:
+        logger.error(f"配置错误: {str(e)}")
         raise HTTPException(
-            status_code=HTTP_401_UNAUTHORIZED,
-            detail="未提供认证信息",
-            headers={"WWW-Authenticate": "ApiKey, Bearer"}
-        )
-
-
-# 创建全局认证实例
-auth = MultiAuth()
-
-# 导出认证依赖
-verify_auth = auth 
+            status_code=HTTP_403_FORBIDDEN,
+            detail="API认证配置错误"
+        ) 
