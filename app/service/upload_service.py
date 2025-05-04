@@ -15,10 +15,11 @@ from app.core.config_manager import ConfigManager
 from app.core.account_manager import AccountManager
 from app.core.cookie_service import CookieService
 from app.core.logger.logger import get_logger
-
+from app.service.account_service import AccountService
 config_manager = ConfigManager()
 account_manager = AccountManager()
 cookie_service = CookieService(account_manager)
+account_service = AccountService()
 logger = get_logger(__name__)
 
 UPLOAD_CACHE_FILE = os.path.join('data', 'upload.json')
@@ -27,6 +28,7 @@ class UploadService:
     """
     上传服务，不依赖initialize，缓存操作fire&forget，主流程100%不会阻塞/卡死/报协程警告
     """
+
     def __init__(self):
         self.upload_cache = {}
         self.cache_loaded = False
@@ -129,25 +131,77 @@ class UploadService:
         signature = HMAC(k_signing, string_to_sign.encode('utf-8'), sha256).hexdigest()
         return signature
 
+    async def _post_with_retry(
+        self,
+        url: str,
+        headers: dict,
+        json_data: dict,
+        timeout: float = 15.0,
+        *,
+        max_token_refresh: int = 1,
+        max_429_retry: int = 5
+    ) -> Optional[httpx.Response]:
+        """
+        支持401自动刷新token、429指数退避，返回最终响应
+        """
+        attempt = 0
+        token_refresh_count = 0
+        current_headers = dict(headers)
+        while attempt < max_429_retry:
+            try:
+                async with httpx.AsyncClient(timeout=timeout) as client:
+                    resp = await client.post(url, headers=current_headers, json=json_data)
+                    # 401 token失效
+                    if resp.status_code == 401 and token_refresh_count < max_token_refresh:
+                        logger.warning("UploadService检测到401，刷新token后重试...")
+                        account = account_manager.get_account_by_token(headers['authorization'].split(' ')[1])
+                        new_token_dict = await account_service.login(account['username'], account['password'])
+                        if not new_token_dict:
+                            logger.error("UploadService刷新token失败")
+                            return None
+                        # 更新header
+                        logger.info(f"UploadService刷新token成功: {new_token_dict['token']}")
+                        current_headers = cookie_service.get_headers(new_token_dict['token'])
+                        token_refresh_count += 1
+                        continue
+                    # 429 指数退避
+                    if resp.status_code == 429 and attempt < max_429_retry - 1:
+                        wait_time = 2 ** attempt
+                        logger.warning(f"OSS getstsToken 429, {wait_time}s后重试")
+                        await asyncio.sleep(wait_time)
+                        attempt += 1
+                        continue
+                    if resp.status_code >= 400:
+                        resp.raise_for_status()
+                    return resp
+            except Exception as e:
+                logger.error(f"UploadService请求出错: {e}")
+                return None
+        return None
+
     async def _upload_to_oss(self, image_bytes: bytes, auth_token: str) -> Optional[str]:
         try:
             logger.info("正在获取STS Token...")
-            async with httpx.AsyncClient(timeout=15) as client:
-                sts_response = await client.post(
-                    f"{config_manager.get('api.url', 'https://chat.qwen.ai/api')}/v1/files/getstsToken",
-                    headers=cookie_service.get_headers(auth_token),
-                    json={
-                        "filename": f"{uuid.uuid4()}.jpg",
-                        "filesize": len(image_bytes),
-                        "filetype": "image"
-                    }
-                )
-                if sts_response.status_code != 200:
-                    error_msg = f"获取STS Token失败: 状态码={sts_response.status_code}, 响应内容={sts_response.text}"
-                    logger.error(error_msg)
-                    return None
-                sts_data = sts_response.json()
-                #logger.info(f"获取到的STS Token响应: {json.dumps(sts_data, indent=2)}")
+            url = f"{config_manager.get('api.url', 'https://chat.qwen.ai/api')}/v1/files/getstsToken"
+            get_headers = cookie_service.get_headers  # 保证最新token
+            token_headers = get_headers(auth_token)
+
+            # 调用带401/429重试的post
+            resp = await self._post_with_retry(
+                url,
+                token_headers,
+                {
+                    "filename": f"{uuid.uuid4()}.jpg",
+                    "filesize": len(image_bytes),
+                    "filetype": "image"
+                },
+                timeout=15.0
+            )
+            if not resp or resp.status_code != 200:
+                emsg = f"获取STS Token失败: 状态码={getattr(resp, 'status_code', '无响应')}, 内容={getattr(resp, 'text', '')}"
+                logger.error(emsg)
+                return None
+            sts_data = resp.json()
 
             credentials_provider = oss.credentials.StaticCredentialsProvider(
                 access_key_id=sts_data['access_key_id'],
@@ -165,7 +219,6 @@ class UploadService:
                 body=image_bytes,
                 content_type='image/jpeg'
             )
-            #logger.info(f"开始上传图片到OSS: {sts_data['bucketname']}/{sts_data['file_path']}")
             response = client.put_object(put_object_request)
             if response.status_code == 200:
                 logger.info(f"图片上传成功，URL: {sts_data['file_url']}")

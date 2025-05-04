@@ -67,7 +67,6 @@ class MessageService:
 
         # ========== 新增处理：base64 image_url替换 ==========
         await process_user_images(messages, auth_token, self.upload_service)
-        print("图片处理")
         # ==================================================
 
         temperature = client_payload.temperature if client_payload.temperature is not None else 1.0
