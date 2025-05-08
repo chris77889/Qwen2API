@@ -9,11 +9,13 @@ from app.models.account import (
     BaseResponse
 )
 from app.service.account_service import AccountService
+from app.core.account_manager import AccountManager
 from app.core.security import verify_api_key
 router = APIRouter(prefix="/accounts", tags=["accounts"])
 
 
 account_service = AccountService()
+account_manager = AccountManager()
 @router.post("/login", response_model=BaseResponse)
 async def _login(
     request: LoginRequest,
@@ -31,14 +33,17 @@ async def _login(
     Returns:
         BaseResponse: 登录结果
     """
-    account = await account_service.login(
-        username=request.username,
-        password=request.password,
-    )
-    return BaseResponse(
-        message="登录成功",
-        data=account
-    )
+    try:
+        account = await account_service.login(
+            username=request.username,
+            password=request.password,
+        )
+        return BaseResponse(
+            message="登录成功",
+            data=account
+        )
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 @router.post("/logout/{username}", response_model=BaseResponse)
 async def logout(
@@ -96,7 +101,27 @@ async def update_account_status(
     if not success:
         raise HTTPException(status_code=400, detail="状态更新失败")
     return BaseResponse(message="状态更新成功")
-
+@router.post("/{username}/refresh", response_model=BaseResponse)
+async def refresh_account(
+    username: str,
+    auth: AccountService = Depends(verify_api_key)
+):
+    """
+    刷新账号
+    
+    Args:
+        username: 用户名
+        auth: 账号服务实例
+    
+    Returns:
+        BaseResponse: 更新结果
+    """
+    try:
+        account = account_manager.get_account_by_username(username)
+        success = await account_service.login(account['username'], account['password'])
+        return BaseResponse(message="刷新成功")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 @router.post("/common-cookies", response_model=BaseResponse)
 async def update_common_cookies(
     cookies: CommonCookiesUpdate,

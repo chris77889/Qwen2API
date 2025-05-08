@@ -12,7 +12,7 @@ from app.router.chat import router as chat_router
 from app.core.logger.logger import get_logger
 from app.core.config_manager import ConfigManager
 from app.core.account_manager import AccountManager
-
+from fastapi.staticfiles import StaticFiles
 logger = get_logger(__name__)
 config_manager = ConfigManager()
 account_manager = AccountManager()
@@ -36,6 +36,7 @@ app.add_middleware(
 app.include_router(account_router)
 app.include_router(model_router)
 app.include_router(chat_router)
+app.mount("/static/", StaticFiles(directory="static",html=True), name="static")
 def get_start_info() -> str:
     """
     获取启动信息字符串
