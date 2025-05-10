@@ -35,6 +35,7 @@ app.add_middleware(
 # 注册API路由
 app.include_router(account_router)
 app.include_router(model_router)
+app.include_router(model_router, prefix="/v1")
 app.include_router(chat_router)
 app.mount("/static/", StaticFiles(directory="static",html=True), name="static")
 def get_start_info() -> str:

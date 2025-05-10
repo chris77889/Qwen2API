@@ -3,11 +3,7 @@
 通义千问 API 的Python版本实现，基于FastAPI和httpx。
 
 > [!NOTE]  
-> 由于代码整体全部重构，部分功能可能会不正常。
-
-
-> [!NOTE]  
-> 现已支持前端管理，访问 /static 页面即可查看。
+> 现已支持前端管理，访问 **/static** 页面即可查看。
 
 > [!IMPORTANT]  
 > 请将原本的配置文件 **accounts.yml** 和 **config.yaml** 从主目录移到到 **config** 目录下
@@ -28,7 +24,7 @@
 - [X] 支持多账户轮询调度
 - [X] 支持缓存上传图片URL，无需等待过久
 - [X] 前端管理
-- [ ] Docker镜像支持
+- [X] Docker镜像支持（部分）
 
 ## 环境要求
 
@@ -57,7 +53,17 @@ pip install -r requirements.txt
 ```bash
 python run.py
 ```
-
+## Docker 命令
+```
+docker build -t qwen2api .
+docker run -d \
+  --name qwen2api \
+  -v $(pwd)/config:/qwen2api/config \
+  -v $(pwd)/data:/qwen2api/data \
+  -v $(pwd)/logs:/qwen2api/logs \
+   -p 2778:2778 \
+   qwen2api:latest 
+```
 ## API接口
 
 提供与 OpenAI 兼容的接口
