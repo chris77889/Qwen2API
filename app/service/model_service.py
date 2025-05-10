@@ -215,18 +215,24 @@ class ModelService:
             self._models.extend(self._convert_to_openai_format(model))
         self._save_models_to_file()
         
-    async def get_models(self) -> List[Dict[str, Any]]:
+    async def get_models(self) -> Dict[str, Any]:
         """
         获取可用模型列表，优先使用缓存，失败时从API获取
         
         Returns:
-            List[Dict[str, Any]]: OpenAI格式的模型列表
+            Dict[str, Any]: 包含object和data字段的模型列表
         """
         if self._models:
-            return self._models
+            return {
+                "object": "list",
+                "data": self._models
+            }
             
         await self._fetch_and_save_models()
-        return self._models
+        return {
+            "object": "list",
+            "data": self._models
+        }
     async def refresh_models(self) -> None:
         """刷新模型列表"""
         await self._fetch_and_save_models()
@@ -324,8 +330,8 @@ class ModelService:
                 base_model = base_model.replace(suffix, '')
         
         # 验证基础模型是否存在
-        models = await self.get_models()
-        model_ids = [m['id'] for m in models]
+        models_data = await self.get_models()
+        model_ids = [m['id'] for m in models_data.get('data', [])]
         
         if base_model not in model_ids:
             logger.warning(f"模型 {model} 不在支持列表中，降级到默认模型 qwen-max-latest")
@@ -351,8 +357,8 @@ class ModelService:
                 base_model = base_model.replace(suffix, '')
         
         # 验证基础模型是否存在
-        models = await self.get_models()
-        model_ids = [m['id'] for m in models]
+        models_data = await self.get_models()
+        model_ids = [m['id'] for m in models_data.get('data', [])]
         
         if model not in model_ids:
             logger.warning(f"模型 {model} 不在支持列表中，降级到默认模型 qwen-turbo")

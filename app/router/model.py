@@ -4,12 +4,12 @@ from typing import List
 from app.service.account_service import AccountService
 from app.core.security import verify_api_key
 from app.service.model_service import ModelService
-from app.models.model import ModelResponse
+from app.models.model import ModelResponse, ModelList
 router = APIRouter(prefix="/models", tags=["models"])
 
 model_service = ModelService()
 
-@router.get("", response_model=List[ModelResponse])
+@router.get("", response_model=ModelList)
 async def get_models(
     auth: AccountService = Depends(verify_api_key)
 ):
@@ -18,7 +18,7 @@ async def get_models(
     """
     return await model_service.get_models()
 
-@router.post("/update", response_model=List[ModelResponse])
+@router.post("/update", response_model=ModelList)
 async def update_models(
     auth: AccountService = Depends(verify_api_key)
 ):

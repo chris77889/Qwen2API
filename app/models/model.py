@@ -6,3 +6,7 @@ class ModelResponse(BaseModel):
     object: str
     created: int
     owned_by: str
+
+class ModelList(BaseModel):
+    object: str = "list"
+    data: List[ModelResponse]
