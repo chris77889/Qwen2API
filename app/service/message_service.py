@@ -70,7 +70,7 @@ class MessageService:
         # ==================================================
 
         temperature = client_payload.temperature if client_payload.temperature is not None else 1.0
-        stream = client_payload.stream if client_payload.stream is not None else True
+        stream = client_payload.stream if client_payload.stream is not None else False
 
         model_config = self.model_service.get_model_config(model)
         chat_type = model_config["completion"].get("chat_type", "t2t")
