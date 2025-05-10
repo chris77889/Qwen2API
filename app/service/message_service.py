@@ -84,14 +84,24 @@ class MessageService:
         if task_type in ('t2i', 't2v'):
             stream = False
 
-        total_len = len(messages)
+        # 处理所有消息，确保字段正确
         qwen_messages = []
-        for idx, m in enumerate(messages):
+        for m in messages:
             m2 = dict(m)
-            if m2["role"] == "user" and idx == total_len - 1:
-                m2["chat_type"] = message_chat_type
-                m2["extra"] = {}
-                m2["feature_config"] = feature_config
+            # 设置正确的chat_type
+            m2["chat_type"] = message_chat_type
+            # 确保extra字段存在且不为null
+            m2["extra"] = {} if m2.get("extra") is None else m2.get("extra", {})
+            # 确保feature_config字段存在且不为null，对于t2i任务强制设置thinking_enabled为false
+            if task_type == 't2i':
+                m2["feature_config"] = {
+                    "thinking_enabled": False,
+                    "output_schema": "phase"
+                }
+            else:
+                # 修复：当feature_config为None时使用默认值
+                m2["feature_config"] = feature_config if m2.get("feature_config") is None else m2.get("feature_config")
+                logger.info(f"m2: {m2}")
             qwen_messages.append(m2)
 
         real_model = await self.model_service.get_real_model(model)
@@ -149,12 +159,11 @@ class MessageService:
                         task_id=task_id,
                         auth_token=auth_token
                     )
-                print(f"task_result: {task_result}")
-            if task_result:
-                print(self._format_sync_response(task_result))
+                logger.info(f"task_result: {task_result}")
+                # 对于图片和视频任务，task_result 已经是格式化好的 OpenAI 格式响应
                 return self._format_sync_response(task_result)
             else:
-                print(self._format_sync_response(result))
+                # 对于普通文本对话，使用 format_sync_response 处理思考模式
                 return self._format_sync_response(result)
 
     def _extract_task_id(self, response: Dict[str, Any]) -> str:
@@ -183,11 +192,13 @@ class MessageService:
 
     def _format_sync_response(self, qwen_response: dict):
         if not qwen_response or "choices" not in qwen_response:
+            #logger.info(f"qwen_response: {qwen_response}")
             return qwen_response
         choices = qwen_response["choices"]
         think_idx = [i for i, c in enumerate(choices)
                      if c.get("message", {}).get("phase") == "think"]
         if not think_idx:
+            #logger.info(f"qwen_response: {qwen_response}")
             return qwen_response
         for i, idx in enumerate(think_idx):
             content = choices[idx]["message"]["content"]
@@ -196,5 +207,6 @@ class MessageService:
             if i == len(think_idx) - 1:
                 content = f"{content}</think>"
             choices[idx]["message"]["content"] = content
-            choices[idx]["modelextra"] = {"reasoning_content": choices[idx]["message"]["content"].replace("<think>", "").replace("</think>", "")}
+            choices[idx]["delta"]["reasoning_content"] = choices[idx]["message"]["content"].replace("<think>", "").replace("</think>", "")
+        #logger.info(f"qwen_response: {qwen_response}")
         return qwen_response

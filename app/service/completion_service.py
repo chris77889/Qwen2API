@@ -95,7 +95,11 @@ class CompletionService:
                     # 成功
                     return resp
             except Exception as e:
-                logger.error(f"请求出错: {e}")
+                logger.error(f"请求出错: {str(e)}")
+                logger.error(f"请求数据: {json_data}")
+                logger.error(f"请求头: {current_headers}")
+                logger.error(f"请求url: {url}")
+                logger.error(f"请求返回: {resp.text}")
                 last_exception = e
                 break
         if last_exception:
@@ -167,6 +171,9 @@ class CompletionService:
                         if response.status_code >= 400:
                             text = await response.aread()
                             logger.error(f"stream 响应异常: {text}")
+                            logger.error(f"stream 响应请求: {data}")
+                            
+                            logger.error(f"stream 响应返回: {response.text}")
                             errtxt = text.decode("utf8", "ignore")
                             yield f"data: {json.dumps({'error': f'请求失败: {errtxt}'})}\n\n".encode()
                             yield b"data: [DONE]\n\n"

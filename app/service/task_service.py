@@ -220,40 +220,49 @@ class TaskService:
             "content": content
         }
         
-        # 如果是成功的图片任务，使用openai格式返回
+        # 如果是成功的图片任务，返回markdown格式
         if status == "success" and task_type == "t2i" and content:
-            response = {
-                'id': 'chatcmpl-'+uuid.uuid4().hex,
+            # 生成带横线的UUID
+            uid = str(uuid.uuid4())
+            return {
+                'id': f'chatcmpl-{uid}',
                 'object': 'chat.completion',
                 'created': int(time.time()*1000),
                 'model': 'qwen-turbo', 
                 'choices': [
-                    {'index': 0, 
-                     'message':
-                       {
-                           'role': 'assistant', 
-                           'content': f"![Generated Image]({content})"
-                           }, 
-                           'finish_reason': 'stop'
-                           }
-                           ], 'usage': {'prompt_tokens': 0, 'completion_tokens': 0, 'total_tokens': 0}}
+                    {
+                        'index': 0,
+                        'message': {
+                            'role': 'assistant',
+                            'content': f"![Generated Image]({content})"
+                        },
+                        'finish_reason': 'stop'
+                    }
+                ],
+                'usage': {
+                    'prompt_tokens': len(content),  # 使用content长度作为prompt_tokens
+                    'completion_tokens': len(f"![Generated Image]({content})"),  # 使用生成的markdown长度作为completion_tokens
+                    'total_tokens': len(content) + len(f"![Generated Image]({content})")  # 总token数
+                }
+            }
         elif status == "success" and task_type == "t2v" and content:
-            response = {
-                'id': 'chatcmpl-'+uuid.uuid4().hex,
+            uid = str(uuid.uuid4())
+            return {
+                'id': f'chatcmpl-{uid}',
                 'object': 'chat.completion',
                 'created': int(time.time()*1000),
                 'model': 'qwen-turbo', 
                 'choices': [
-                    {'index': 0, 
-                     'message':
-                       {
-                           'role': 'assistant', 
-                           'content': f"[链接]({content})"
-                           }, 
-                           'finish_reason': 'stop'
-                           }
-                           ], 
-                           'usage': 
-                           {'prompt_tokens': 0, 'completion_tokens': 0, 'total_tokens': 0}}
+                    {
+                        'index': 0,
+                        'message': {
+                            'role': 'assistant',
+                            'content': f"[视频链接]({content})"
+                        },
+                        'finish_reason': 'stop'
+                    }
+                ],
+                'usage': {'prompt_tokens': 0, 'completion_tokens': 0, 'total_tokens': 0}
+            }
             
         return response
