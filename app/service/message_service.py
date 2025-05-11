@@ -1,7 +1,8 @@
 # app/service/message_service.py
 
 import json
-from typing import Dict, List, Any
+import asyncio
+from typing import Dict, List, Any, AsyncGenerator
 from app.models.chat import ChatRequest
 from app.service.completion_service import CompletionService
 from app.service.model_service import ModelService
@@ -71,6 +72,9 @@ class MessageService:
 
         temperature = client_payload.temperature if client_payload.temperature is not None else 1.0
         stream = client_payload.stream if client_payload.stream is not None else False
+        
+        # 保存客户端原始stream请求标志
+        original_stream_request = stream
 
         model_config = self.model_service.get_model_config(model)
         chat_type = model_config["completion"].get("chat_type", "t2t")
@@ -101,7 +105,7 @@ class MessageService:
             else:
                 # 修复：当feature_config为None时使用默认值
                 m2["feature_config"] = feature_config if m2.get("feature_config") is None else m2.get("feature_config")
-                logger.info(f"m2: {m2}")
+                #logger.info(f"m2: {m2}")
             qwen_messages.append(m2)
 
         real_model = await self.model_service.get_real_model(model)
@@ -159,9 +163,17 @@ class MessageService:
                         task_id=task_id,
                         auth_token=auth_token
                     )
-                logger.info(f"task_result: {task_result}")
-                # 对于图片和视频任务，task_result 已经是格式化好的 OpenAI 格式响应
-                return self._format_sync_response(task_result)
+                #logger.info(f"task_result: {task_result}")
+                
+                # 根据客户端原始请求类型，选择合适的响应格式
+                formatted_result = self._format_sync_response(task_result)
+                if original_stream_request:
+                    # 如果客户端请求流式响应，将结果转换为流式格式返回
+                    stream_gen = self._convert_to_streaming_response(formatted_result)
+                    return StreamingResponse(stream_gen, media_type="text/event-stream")
+                else:
+                    # 如果客户端请求非流式响应，直接返回结果
+                    return formatted_result
             else:
                 # 对于普通文本对话，使用 format_sync_response 处理思考模式
                 return self._format_sync_response(result)
@@ -210,3 +222,56 @@ class MessageService:
             choices[idx]["delta"]["reasoning_content"] = choices[idx]["message"]["content"].replace("<think>", "").replace("</think>", "")
         #logger.info(f"qwen_response: {qwen_response}")
         return qwen_response
+        
+    async def _convert_to_streaming_response(self, response_data: dict) -> AsyncGenerator[bytes, None]:
+        """
+        将非流式响应转换为流式响应格式
+        
+        Args:
+            response_data: 原始的非流式响应数据
+            
+        Returns:
+            AsyncGenerator: 流式响应生成器
+        """
+        try:
+            # 检查响应数据是否有效
+            if not response_data or "choices" not in response_data:
+                yield f"data: {json.dumps({'error': '无效的响应数据'})}\n\n".encode("utf-8")
+                yield b"data: [DONE]\n\n"
+                return
+                
+            # 获取响应内容
+            choices = response_data.get("choices", [])
+            if not choices:
+                yield f"data: {json.dumps({'error': '响应中没有内容'})}\n\n".encode("utf-8")
+                yield b"data: [DONE]\n\n"
+                return
+                
+            # 获取第一个选择项的消息内容
+            message = choices[0].get("message", {})
+            content = message.get("content", "")
+            role = message.get("role", "assistant")
+            
+            # 构建流式响应数据
+            chunk = {
+                "choices": [{
+                    "index": 0,
+                    "delta": {
+                        "role": role,
+                        "content": content
+                    },
+                    "finish_reason": "stop"
+                }]
+            }
+            
+            # 发送流式响应
+            yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n".encode("utf-8")
+            
+            # 发送完成标记
+            await asyncio.sleep(0.1)  # 短暂延迟，确保客户端能够正确接收
+            yield b"data: [DONE]\n\n"
+            
+        except Exception as e:
+            logger.error(f"转换流式响应时出错: {str(e)}")
+            yield f"data: {json.dumps({'error': str(e)})}\n\n".encode("utf-8")
+            yield b"data: [DONE]\n\n"
