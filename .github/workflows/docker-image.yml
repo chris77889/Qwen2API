@@ -39,7 +39,7 @@ jobs:
         run: docker save qwen2api:latest > image.tar
 
       - name: 上传 Docker 镜像
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: docker-image
           path: image.tar
