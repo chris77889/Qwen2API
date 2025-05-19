@@ -10,6 +10,7 @@ from app.core.account_manager import AccountManager
 from app.core.cookie_service import CookieService
 from app.core.logger.logger import get_logger
 from app.service.account_service import AccountService
+import time as _time
 account_service = AccountService()
 logger = get_logger(__name__)
 
@@ -116,10 +117,12 @@ class CompletionService:
         chat_mode: str = "normal",
         size: str = None,
         temperature: float = 1.0,
-        timeout: float = 60.0
+        timeout: float = 60.0,
+        send_heartbeat: Optional[bool] = None  # 新增参数：可覆盖全局配置
     ) -> AsyncGenerator[bytes, None]:
         """
-        流式接口，支持<think></think>及401/429自动重试
+        流式接口，支持<think></think>及401/429自动重试。
+        - 若配置开启generate_heartbeat，则每N秒自动输出一段SSE不可见字符，防止超时断开。
         """
         data = self._prepare_request_data(
             messages=messages,
@@ -138,6 +141,13 @@ class CompletionService:
         attempt = 0
         token_refresh_count = 0
         token = auth_token
+
+        # ====【心跳相关增强 BEGIN】====
+        heartbeat_interval = 5  # 默认5s
+
+        # 记录上次心跳时间戳
+        last_heartbeat_ts = _time.monotonic()
+        # ====【心跳相关增强 END】====
 
         while attempt < max_429_retry:
             current_headers = self.cookie_service.get_headers(token)
@@ -172,7 +182,6 @@ class CompletionService:
                             text = await response.aread()
                             logger.error(f"stream 响应异常: {text}")
                             logger.error(f"stream 响应请求: {data}")
-                            
                             logger.error(f"stream 响应返回: {response.text}")
                             errtxt = text.decode("utf8", "ignore")
                             yield f"data: {json.dumps({'error': f'请求失败: {errtxt}'})}\n\n".encode()
@@ -182,6 +191,14 @@ class CompletionService:
                         # ==== 正常流式处理 ↓
                         in_think_phase = False
                         async for line in response.aiter_lines():
+                            # ====【心跳增强】====
+                            # 每 heartbeat_interval 秒，SSE投递一行"心跳"
+                            now_ts = _time.monotonic()
+                            if (now_ts - last_heartbeat_ts >= heartbeat_interval):
+                                # ":heartbeat"为合法SSE注释，前端/浏览器不可见，只刷新连接
+                                yield b":heartbeat\n\n"
+                                last_heartbeat_ts = now_ts
+                            # ====【心跳增强 END】====
                             if not line.strip():
                                 continue
                             if line.startswith("data: "):
