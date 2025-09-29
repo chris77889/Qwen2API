@@ -18,28 +18,55 @@ class CompletionService:
     def __init__(self):
         self.account_manager = AccountManager()
         self.cookie_service = CookieService(self.account_manager)
-        self.base_url = "https://chat.qwen.ai/api"
+        self.base_url = "https://chat.qwen.ai/api/v2"
+
+    async def _generate_chat_id(self, token: str, model: str, chat_type: str) -> Optional[str]:
+        """
+        根据给定的参数生成一个新的chat_id
+        """
+        url = f"{self.base_url}/chats/new"
+        headers = self.cookie_service.get_headers(token)
+        payload = {
+            "title": "New Chat",
+            "models": [model],
+            "chat_mode": "normal",
+            "chat_type": chat_type,
+            "timestamp": int(time.time() * 1000)
+        }
+        try:
+            async with httpx.AsyncClient() as client:
+                resp = await client.post(url, headers=headers, json=payload, timeout=10.0)
+                resp.raise_for_status()
+                response_data = resp.json()
+                return response_data.get("data", {}).get("id")
+        except Exception as e:
+            logger.error(f"生成chat_id失败: {e}")
+            return None
 
     def _prepare_request_data(
         self,
         messages: List[Dict[str, Any]],
         model: str,
+        chat_id:str,
         stream: bool = True,
         chat_type: str = "t2t",
         sub_chat_type: str = "t2t",
         chat_mode: str = "normal",
-        size: str = None,
-        temperature: float = 1.0
+        size: Optional[str] = None,
+        temperature: float = 1.0,
+        parent_id: Optional[str] = None
     ) -> Dict[str, Any]:
         data = {
             "stream": stream,
             "incremental_output": True,
+            "chat_id": chat_id, 
             "chat_type": chat_type,
             "model": model,
             "messages": messages,
-            "session_id": str(uuid.uuid4()),
-            "chat_id": str(uuid.uuid4()),
-            "id": str(uuid.uuid4()),
+            # "session_id": str(uuid.uuid4()),
+            # "id": str(uuid.uuid4()),
+            "parent_id": parent_id,  # 添加 parent_id
+            "timestamp": int(time.time()),  # 添加当前时间戳
             "sub_chat_type": sub_chat_type,
             "chat_mode": chat_mode,
         }
@@ -58,7 +85,7 @@ class CompletionService:
         *,
         max_token_refresh: int = 1,
         max_429_retry: int = 5
-    ) -> httpx.Response:
+    ) -> Optional[httpx.Response]:
         """
         - 401 自动刷新token后重试1次
         - 429 指数退避重试5次
@@ -68,6 +95,7 @@ class CompletionService:
         current_headers = dict(headers)
         last_exception = None
         while attempt < max_429_retry:
+            resp = None
             try:
                 async with httpx.AsyncClient() as client:
                     resp = await client.post(url, headers=current_headers, json=json_data, timeout=timeout)
@@ -75,6 +103,9 @@ class CompletionService:
                     if resp.status_code == 401 and token_refresh_count < max_token_refresh:
                         logger.warning("检测到401无效token，尝试刷新token...")
                         account = self.account_manager.get_account_by_token(headers['Authorization'].split(' ')[1])
+                        if not account:
+                            logger.error("在account_manager中找不到对应的账户信息，无法刷新token！")
+                            raise Exception("无法刷新token，账户信息不存在")
                         new_token_dict = await account_service.login(account['username'], account['password'])
                         if not new_token_dict:
                             logger.error("刷新token失败，无法继续重试！")
@@ -100,11 +131,13 @@ class CompletionService:
                 logger.error(f"请求数据: {json_data}")
                 logger.error(f"请求头: {current_headers}")
                 logger.error(f"请求url: {url}")
-                logger.error(f"请求返回: {resp.text}")
+                if resp:
+                    logger.error(f"请求返回: {resp.text}")
                 last_exception = e
                 break
         if last_exception:
             raise last_exception
+        return None
 
     async def stream_completion(
         self,
@@ -115,18 +148,24 @@ class CompletionService:
         chat_type: str = "t2t",
         sub_chat_type: str = "t2t",
         chat_mode: str = "normal",
-        size: str = None,
+        chat_id: Optional[str] = None,
+        size: Optional[str] = None,
         temperature: float = 1.0,
-        timeout: float = 60.0,
-        send_heartbeat: Optional[bool] = None  # 新增参数：可覆盖全局配置
+        timeout: float = 180.0
     ) -> AsyncGenerator[bytes, None]:
         """
         流式接口，支持<think></think>及401/429自动重试。
         - 若配置开启generate_heartbeat，则每N秒自动输出一段SSE不可见字符，防止超时断开。
         """
+        if not chat_id:
+            chat_id = await self._generate_chat_id(token=auth_token, model=model, chat_type=chat_type)
+            if not chat_id:
+                return
+
         data = self._prepare_request_data(
             messages=messages,
             model=model,
+            chat_id=chat_id,
             stream=stream,
             chat_type=chat_type,
             sub_chat_type=sub_chat_type,
@@ -134,7 +173,8 @@ class CompletionService:
             temperature=temperature,
             size=size
         )
-        url = f"{self.base_url}/chat/completions"
+
+        url = f"{self.base_url}/chat/completions?chat_id={chat_id}"
 
         max_token_refresh = 1
         max_429_retry = 5
@@ -163,6 +203,10 @@ class CompletionService:
                         if response.status_code == 401 and token_refresh_count < max_token_refresh:
                             logger.warning("stream检测到401无效token，尝试刷新后重试")
                             account = self.account_manager.get_account_by_token(auth_token)
+                            if not account:
+                                logger.error("stream在account_manager中找不到对应的账户信息，无法刷新token！")
+                                yield b"data: [DONE]\n\n"
+                                return
                             new_token_dict = await account_service.login(account['username'], account['password'])
                             if not new_token_dict:
                                 logger.error("stream刷新token失败，无法继续重试！")
@@ -323,7 +367,8 @@ class CompletionService:
         chat_type: str = "t2t",
         sub_chat_type: str = "t2t",
         chat_mode: str = "normal",
-        size: str = None,
+        chat_id: Optional[str] = None,
+        size: Optional[str] = None,
         temperature: float = 1.0,
         timeout: float = 60.0
     ) -> Any:
@@ -332,20 +377,30 @@ class CompletionService:
         """
         if not messages:
             raise HTTPException(status_code=400, detail="消息列表不能为空")
+
+        if not chat_id:
+            chat_id = await self._generate_chat_id(token=auth_token, model=model, chat_type=chat_type)
+            if not chat_id:
+                raise HTTPException(status_code=500, detail="Failed to generate chat_id")
+
         data = self._prepare_request_data(
             messages=messages,
             model=model,
             stream=stream,
+            chat_id=chat_id,
             chat_type=chat_type,
             sub_chat_type=sub_chat_type,
             chat_mode=chat_mode,
             temperature=temperature,
             size=size
         )
-        url = f"{self.base_url}/chat/completions"
+        print(data)
+        url = f"{self.base_url}/chat/completions?chat_id={chat_id}"
         headers = self.cookie_service.get_headers(auth_token)
         try:
             resp = await self._post_with_retry(url, headers, data, timeout)
+            if resp is None:
+                raise Exception("请求重试后仍然失败")
         except Exception as e:
             logger.error(f"请求失败: {e}")
             raise HTTPException(
